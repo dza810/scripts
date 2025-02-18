@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>WebSocket Client</title>
+<script src="/gemini-live-api.js" ></script>
+</head>
+<body>
+  <h1>WebSocket Client</h1>
+
+  <button id="connectButton">Connect</button>
+  <input type="text" id="messageInput" placeholder="Enter message">
+  <button id="sendButton">Send</button>
+
+  <div id="log"></div>
+
+  <script>
+    const connectButton = document.getElementById('connectButton');
+    const sendButton = document.getElementById('sendButton');
+    const messageInput = document.getElementById('messageInput');
+    const log = document.getElementById('log');
+
+    let websocket;
+
+    function addLogEntry(message, color) {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString(); // 時刻のみ
+      log.innerHTML += `<div style="color: ${color};">[${timeString}] ${message}</div>`;
+    }
+
+
+    connectButton.addEventListener('click', () => {
+      websocket = new WebSocket('wss://');
+
+      websocket.onopen = () => {
+        addLogEntry('Connected to WebSocket server', 'black');
+        connectButton.disabled = true;
+        sendButton.disabled = false;
+      };
+
+      websocket.onmessage = (event) => {
+        addLogEntry(`Received: ${event.data}`, 'blue');
+      };
+
+      websocket.onclose = () => {
+        addLogEntry('Disconnected from WebSocket server', 'black');
+        connectButton.disabled = false;
+        sendButton.disabled = true;
+      };
+
+      websocket.onerror = (error) => {
+        addLogEntry(`Error: ${error.message}`, 'red');
+      };
+    });
+
+    sendButton.addEventListener('click', () => {
+      const message = messageInput.value;
+      websocket.send(message);
+      addLogEntry(`Sent: ${message}`, 'green');
+      messageInput.value = '';
+    });
+  </script>
+</body>
+</html>
+
