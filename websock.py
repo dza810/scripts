@@ -4,15 +4,22 @@ import websockets
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+async def recv(q):
+    while True:
+        message = await websocket.recv()
+        print(datetime.now(),f"Received: {message}")
+        q.put_nowait(message)
+
+async def send(q):
+    while True:
+        await websocket.send(f"Echo: {message}")
+
 async def handler(websocket):
+    q = asyncio.Queue()
     print(datetime.now(), "Client connected")
-    try:
-        while True:
-            message = await websocket.recv()
-            print(datetime.now(),f"Received: {message}")
-            await websocket.send(f"Echo: {message}")
-    except websockets.exceptions.ConnectionClosedError:
-        print(datetime.now(), "Client disconnected")
+    async with TaskGroup() as tg:
+        tg.create_task(send(q))
+        tg.create_task(recv(q))
 
 async def main():
     print(datetime.now(), "server start")
