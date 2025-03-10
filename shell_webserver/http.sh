@@ -27,11 +27,23 @@ then
   body=$(cat ".${url}")
 fi
 
+# Content-Length: ${#body}
+
+status="200 OK"
 cat <<EOF
 HTTP/1.1 $status
-Content-Length: ${#body}
-Content-Type: text/html
+Content-Type: text/plain
+Transfer-Encoding: chunked
 
-${body}
 EOF
+
+while read l
+do
+  line=$(echo -n "$l" | tr -d '\r\n')
+  echo "${#line} ${line}" >output
+  [[ -z "$line" ]] && continue
+  echo -ne "${#line}\r\n${line}\r\n"
+done <<<"$body"
+
+echo -ne "0\r\n\r\n"
 
