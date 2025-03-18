@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-trap SIGINT "kill -$$"
+trap "kill -- -$$" SIGINT  
 
-for i in {1..10}
+for i in {1..2}
 do
 	(
 	while true
 	do
-		( sleep 3 && echo "Im $i" ) &
+		python -c "import time; time.sleep(10); print('$i')"
 	done
 ) &
 done
