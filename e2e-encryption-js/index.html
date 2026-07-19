@@ -1,0 +1,32 @@
+<html>
+  <header>
+    <meta charset="utf-8">
+  </header>
+  <body>
+    <div id="error" style="color: red;"></div>
+    <div>
+      <select id="name">
+        <option value="alice">alice</option>
+        <option value="bob">bob</option>
+      </select>
+      <button id="genKey">generate My Key</button>
+      <button id="postPubKey">post My Pub Key</button>
+    </div>
+    <div>
+      <select id="opp-name">
+        <option value="alice">alice</option>
+        <option value="bob">bob</option>
+      </select>
+      <button id="getPubKey">get pub key</button>
+    </div>
+    <div>
+      <input id="input"/>
+      <button id="send">送信</button>
+    </div>
+    <div>
+      <button id="fetch">受信</button>
+      <span id="output"/> 
+    </div>
+    <script src="/index.js"></script>
+  </body>
+</html>
