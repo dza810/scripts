@@ -42,3 +42,19 @@ publish 後や動作確認時は、成功ステータスだけでなく**中身*
 - [ ] `validate_workflow` / 更新時の `validationWarnings` を確認。
       ただし既存の無害な警告（例：動作中の Slack ノードの `resource` discriminator 警告）は
       今回の変更と切り分ける
+
+### 4. Form Trigger / Webhook を公開する場合はアクセス制御の経路を確認
+
+n8n の手前に Cloudflare Access（Zero Trust）などのリバースプロキシ認証がある場合、
+`/form/*` や ``/webhook/*` のパスがそのアクセス制御でブロックされていないか確認する。
+
+- [ ] `curl -I <production form URL>` して **302 で Access ログインページへリダイレクトされていないか** 確認する
+      （ワークフロー実行ログには記録が残らないため、実行ログだけ見ても気づけない）
+- [ ] ブロックされている場合は、n8n 側ではなく Cloudflare（等）の Access Application 設定で
+      該当パスに Bypass（認証不要）ポリシーを追加する必要がある
+
+> 実例：`毎日の振り返り`（`kxAsviuzSS6yyARz`）で、フォーム送信が
+> 「Problem submitting response」エラーになる不具合。ワークフロー設定は正しかったが、
+> `n8n.dza810.com` ドメイン全体が Cloudflare Access で保護されており、
+> `/form/reflection` への GET/POST が Access ログインページへ 302 リダイレクトされていたため、
+> ブラウザからの送信リクエストが n8n まで届いていなかった。
