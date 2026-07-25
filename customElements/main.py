@@ -1,7 +1,7 @@
 import sqlite3
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -28,84 +28,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 async def root():
     return FileResponse("index.html")
-
-
-def _getClass(con, class_cd: str):
-    return con.execute(
-        """
-      SELECT
-        class_dtl_cd as value,
-        class_dtl_name as name
-      FROM class_dtl_master
-      JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
-      WHERE class_master.class_cd = :class_cd
-      ORDER BY class_dtl_master.view_order
-      """,
-        {"class_cd": class_cd},
-    ).fetchall()
-
-
-@app.get("/getClass")
-async def getClass(code: str, dbConnection: DbConnection):
-    return _getClass(dbConnection, code)
-
-
-# columns = {
-#     "carList": {
-#         "columnOptions ": [],
-#         "rowStyles ": [
-#             {
-#                 "code": """ getField("electric") """,
-#                 "style": """ { "background-color": "yellow" } """,
-#             },
-#             {
-#                 "code": """ getField("model") == "Model Y" """,
-#                 "style": """ { "background-color": "gray" } """,
-#             },
-#         ],
-#     }
-# }
-
-
-def getRowStyle(con, screen_cd: str):
-    columnOptions = con.execute(
-        """
-SELECT
-    row_style.row_style_code_condition as code,
-    row_style.row_style_code_style as style
-FROM row_style
-JOIN screen ON screen.screen_id = row_style.screen_id
-WHERE screen_cd = :screen_cd
-ORDER BY row_style_cd
-""",
-        {"screen_cd": screen_cd},
-    ).fetchall()
-    return columnOptions
-
-
-def getColumnOptions(con, screen_cd: str):
-    columnOptions = con.execute(
-        """
-SELECT *
-FROM column
-JOIN screen ON screen.screen_id = column.screen_id
-WHERE screen_cd = :screen_cd
-ORDER BY view_order, column_cd, column_name
-""",
-        {"screen_cd": screen_cd},
-    ).fetchall()
-    return columnOptions
-
-
-@app.get("/getColumns")
-async def getColumns(screenCd: str, dbConnection: DbConnection):
-    columnOptions = getColumnOptions(dbConnection, screenCd)
-    for col in columnOptions:
-        if col["type"] == "dropdown":
-            col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
-
-    rowStyles = getRowStyle(dbConnection, screenCd)
-    return {"columnOptions": columnOptions, "rowStyles": rowStyles}
 
 
 def handleSqlValue(v):
@@ -152,9 +74,25 @@ def update(con, table_name, data: dict, where: dict):
     return con.execute(sql, params)
 
 
+def _getClass(con, class_cd):
+    return con.execute(
+        """
+      SELECT
+        class_dtl_cd as value,
+        class_dtl_name as name
+      FROM class_dtl_master
+      JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
+      WHERE class_master.class_cd = :class_cd
+      ORDER BY class_dtl_master.view_order
+      """,
+        {"class_cd": class_cd},
+    ).fetchall()
+
+
 class ScreenCls:
-    def __init__(self, con):
+    def __init__(self, con, screen_cd):
         self.con = con
+        self.screen_cd = screen_cd
 
     def _search(self, params, table_name, order_by):
         conditions = [makeEqCondition(k, v) for k, v in params.items()]
@@ -173,10 +111,12 @@ class ScreenCls:
 
     def run_insert(self, table_name, data):
         print("insert", table_name, data)
+        self._check_key(data.keys())
         return insert(self.con, table_name, data)
 
     def run_update(self, table_name, data, where):
         print("update", table_name, data)
+        self._check_key(data.keys())
         return update(self.con, table_name, data, where)
 
     def _update(self, table_name, update):
@@ -190,6 +130,43 @@ class ScreenCls:
                 {k: v for k, v in upd_row.items() if k != "id"},
                 {f"{table_name}_id": upd_row["id"]},
             )
+
+    def _check_key(self, keys):
+        columns = {
+            v
+            for v in {col.get("column_name") for col in self.getColumnOptions()}
+            if v is not None
+        }
+        for key in keys:
+            if key not in columns:
+                raise Exception("invalid key")
+        return columns
+
+    def getRowStyle(self):
+        return self.con.execute(
+            """
+            SELECT
+                row_style.row_style_code_condition as code,
+                row_style.row_style_code_style as style
+            FROM row_style
+            JOIN screen ON screen.screen_id = row_style.screen_id
+            WHERE screen_cd = :screen_cd
+            ORDER BY row_style_cd
+            """,
+            {"screen_cd": self.screen_cd},
+        ).fetchall()
+
+    def getColumnOptions(self):
+        return self.con.execute(
+            """
+            SELECT *
+            FROM column
+            JOIN screen ON screen.screen_id = column.screen_id
+            WHERE screen_cd = :screen_cd
+            ORDER BY view_order, column_cd, column_name
+            """,
+            {"screen_cd": self.screen_cd},
+        ).fetchall()
 
 
 class ScreenMaster(ScreenCls):
@@ -252,17 +229,17 @@ class RowStyleMaster(ScreenCls):
 def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
     screen_cd = screenCd
     if screen_cd == "column_master":
-        return ColumnMaster(con)
+        return ColumnMaster(con, screen_cd)
     if screen_cd == "screen_master":
-        return ScreenMaster(con)
+        return ScreenMaster(con, screen_cd)
     if screen_cd == "car_list":
-        return CarList(con)
+        return CarList(con, screen_cd)
     if screen_cd == "class_master":
-        return ClassMaster(con)
+        return ClassMaster(con, screen_cd)
     if screen_cd == "class_dtl_master":
-        return ClassDtlMaster(con)
+        return ClassDtlMaster(con, screen_cd)
     if screen_cd == "row_style_master":
-        return RowStyleMaster(con)
+        return RowStyleMaster(con, screen_cd)
     raise Exception("invalid screen code")
 
 
@@ -285,3 +262,19 @@ class Register(BaseModel):
 @app.post("/register")
 async def register(screen: Screen, update: Register):
     screen.update(update)
+
+
+@app.get("/getClass")
+async def getClass(code: str, dbConnection: DbConnection):
+    return _getClass(dbConnection, code)
+
+
+@app.get("/getColumns")
+async def getColumns(screen: Screen, dbConnection: DbConnection):
+    columnOptions = screen.getColumnOptions()
+    for col in columnOptions:
+        if col["type"] == "dropdown":
+            col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
+
+    rowStyles = screen.getRowStyle()
+    return {"columnOptions": columnOptions, "rowStyles": rowStyles}
