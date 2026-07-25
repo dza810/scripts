@@ -37,7 +37,7 @@ export class AgGridDiv extends HTMLDivElement {
           if (!field) {
             return false;
           }
-          const oldValue = this.#originalData?.get(params.data.id)[field]
+          const oldValue = this.#originalData?.get(params.data.id)?.[field]
           if (oldValue !== params.value) {
             return true;
           }
@@ -110,14 +110,13 @@ export class AgGridDiv extends HTMLDivElement {
           },
         },
         "text": {
-          cellDataType: "text"
+          cellDataType: "text",
+          cellEditor: "agTextCellEditor"
         },
         "number": {
-          cellDataType: "number"
-        },
-        "boolean": {
-          cellDataType: "boolean",
-          cellRenderer: 'agCheckboxCellRenderer',
+          cellDataType: "number",
+          cellEditor: "agNumberCellEditor",
+          filter: 'agNumberColumnFilter',
         },
         "checkbox": {
           cellDataType: "boolean",
@@ -149,7 +148,22 @@ export class AgGridDiv extends HTMLDivElement {
         return style;
       },
     };
-    this.#agGridApi = agGrid.createGrid(this, gridOptions);
+    const addButton = document.createElement("button")
+    addButton.textContent = "追加"
+    addButton.addEventListener("click", () => this.addRow())
+    this.append(addButton)
+
+    const agGridDiv = document.createElement("div")
+    agGridDiv.style.height = "90%";
+    this.append(agGridDiv)
+
+    this.#agGridApi = agGrid.createGrid(agGridDiv, gridOptions);
+  }
+
+  addRow() {
+    this.#agGridApi.applyTransaction({
+      add: [{ __isInserted: true }]
+    });
   }
 
   setRowData(rowData) {
@@ -168,15 +182,24 @@ export class AgGridDiv extends HTMLDivElement {
     const updateList = []
     this.#agGridApi.forEachNode((node) => {
       const data = node.data
-      if (data.__isUpdated) {
+      if (data.__isInserted) {
+        console.log('insert', data)
+        const newData = {}
+        for (const [k, v] of Object.entries(data)) {
+          if (k.startsWith("__")) {
+            continue
+          }
+          newData[k] = v
+        }
+        insertList.push(newData)
+      } else if (data.__isUpdated) {
         const updateData = {}
         const beforeData = this.#originalData.get(data.id);
         for (const [colKey, colValue] of Object.entries(data)) {
-          if (colKey == "__isUpdated") {
+          if (colKey.startsWith("__")) {
             continue
           }
-          const beforeValue = beforeData[colKey]
-          console.log(colKey, 'before=', beforeValue, 'after=', colValue)
+          const beforeValue = beforeData?.[colKey]
           if (colValue != beforeValue) {
             updateData[colKey] = colValue
             console.log(updateData)

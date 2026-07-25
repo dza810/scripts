@@ -1,8 +1,8 @@
 import sqlite3
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI
-from fastapi.responses import FileResponse
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -23,6 +23,19 @@ DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+class InvalidKeyException(Exception):
+    def __init__(self, name: str):
+        self.name = name
+
+
+@app.exception_handler(InvalidKeyException)
+async def invalid_key_exception(request: Request, exc: InvalidKeyException):
+    return JSONResponse(
+        status_code=418,
+        content={"message": f"invalid key: {exc.name}"}
+    )
 
 
 @app.get("/")
@@ -48,6 +61,8 @@ def makeEqCondition(k, v):
 
 
 def insert(con, table_name, data: dict):
+    if len(data) == 0:
+        return None
     sql = f"""
     INSERT INTO {table_name} (
       {",\n  ".join(f"`{k}`" for k in data)}
@@ -139,7 +154,7 @@ class ScreenCls:
         }
         for key in keys:
             if key not in columns:
-                raise Exception("invalid key")
+                raise InvalidKeyException(key)
         return columns
 
     def getRowStyle(self):

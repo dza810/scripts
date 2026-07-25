@@ -17,22 +17,40 @@ def connect():
 class Column:
     code: str
     type_: str
+    data_type: str
     in_uniq: bool
     not_null: bool
 
 
-def column(code, type_, *, in_uniq=False, not_null=False, default=None):
+def column(
+    code,
+    type_,
+    *,
+    data_type=None,
+    in_uniq=False,
+    not_null=False,
+    default=None,
+    dropdown_class_cd=None,
+):
     col = Column()
     col.code = code
-    if type_ == "number":
-        col.type_ = "integer"
-    if type_ == "checkbox":
-        col.type_ = "boolean"
+
+    if data_type is None:
+        if type_ == "number":
+            col.data_type = "integer"
+        if type_ == "checkbox":
+            col.data_type = "boolean"
+        else:
+            col.data_type = type_
     else:
-        col.type_ = type_
+        col.data_type = data_type
+
+    col.type_ = type_
+
     col.in_uniq = in_uniq
     col.not_null = not_null
     col.default = default
+    col.dropdown_class_cd = dropdown_class_cd
     return col
 
 
@@ -64,7 +82,7 @@ column_table = table(
         column("column_name", "text", not_null=True),
         column("type", "text", not_null=True),
         column("view_order", "number", not_null=True),
-        column("required", "checkbox", not_null=True, default="FALSE"),
+        column("required", "checkbox", not_null=True, default=0),
         column("cell_style_code_condition", "text"),
         column("cell_style_code_style", "text"),
         # dropdown
@@ -89,8 +107,15 @@ row_style_table = table(
 car_table = table(
     "car",
     [
-        column("make", "text", in_uniq=True, not_null=True),
-        column("model", "text", in_uniq=True, not_null=True),
+        column(
+            "make",
+            "dropdown",
+            data_type="text",
+            in_uniq=True,
+            not_null=True,
+            dropdown_class_cd="make",
+        ),
+        column("model", "text", in_uniq=True),
         column("price", "number"),
         column("electric", "checkbox"),
     ],
@@ -110,7 +135,7 @@ class_dtl_table = table(
         column("class_id", "number", in_uniq=True, not_null=True),
         column("class_dtl_cd", "text", in_uniq=True, not_null=True),
         column("class_dtl_name", "text", not_null=True),
-        column("is_default", "checkbox", not_null=True, default="FALSE"),
+        column("is_default", "checkbox", not_null=True, default=0),
         column("view_order", "number"),
     ],
 )
@@ -125,7 +150,7 @@ def create_table_sql(table):
                 v
                 for v in [
                     f"`{col.code}`",
-                    col.type_,
+                    col.data_type,
                     "NOT NULL" if col.not_null else None,
                     f"DEFAULT `{col.default}`" if col.default is not None else None,
                 ]
@@ -174,6 +199,7 @@ def make_table(con, table, screen_cd, screen_name):
                 "column_cd": col.code,
                 "column_name": col.code,
                 "type": col.type_,
+                "dropdown_class_cd": col.dropdown_class_cd,
             },
         )
 
