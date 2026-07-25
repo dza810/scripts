@@ -19,12 +19,14 @@ export class AgGridDiv extends HTMLDivElement {
       if (params.value === undefined) {
         return;
       }
-      const cellStyleCodeStyle = params.colDef?.cellStyleCodeStyle;
-      const code = params.colDef?.cellStyleCodeCondition
+      const cellStyleCodeStyle = params.colDef?.cell_style_code_style;
+      const code = params.colDef?.cell_style_code_condition;
       if (!code || !cellStyleCodeStyle) { return }
       const result = this.#safeEval(params, code)
       if (result) {
-        return JSON.parse(cellStyleCodeStyle);
+        const style = JSON.parse(cellStyleCodeStyle);
+        console.debug('enabled', code, style)
+        return style
       }
       return
     },

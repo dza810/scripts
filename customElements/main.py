@@ -31,7 +31,8 @@ async def root():
 
 
 def _getClass(con, class_cd: str):
-    return con.execute("""
+    return con.execute(
+        """
       SELECT
         class_dtl_cd as value,
         class_dtl_name as name
@@ -39,7 +40,9 @@ def _getClass(con, class_cd: str):
       JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
       WHERE class_master.class_cd = :class_cd
       ORDER BY class_dtl_master.view_order
-      """, {'class_cd': class_cd}).fetchall()
+      """,
+        {"class_cd": class_cd},
+    ).fetchall()
 
 
 @app.get("/getClass")
@@ -102,14 +105,12 @@ async def getColumns(screenCd: str, dbConnection: DbConnection):
             col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
 
     rowStyles = getRowStyle(dbConnection, screenCd)
-    return {"columnOptions": columnOptions, 'rowStyles': rowStyles}
+    return {"columnOptions": columnOptions, "rowStyles": rowStyles}
 
 
 def handleSqlValue(v):
     if v is None:
         return "NULL"
-    if isinstance(v, str):
-        return f"'{v}'"
     if v is True:
         return 1
     if v is False:
@@ -119,15 +120,15 @@ def handleSqlValue(v):
 
 def makeEqCondition(k, v):
     if v is None:
-        return f"{k} is NULL"
+        return f"`{k}` is ?", "NULL"
     else:
-        return f"{k} = {handleSqlValue(v)}"
+        return f"`{k}` = ?", handleSqlValue(v)
 
 
 def insert(con, table_name, data: dict):
     sql = f"""
     INSERT INTO {table_name} (
-      {",\n  ".join(k for k in data)}
+      {",\n  ".join(f"`{k}`" for k in data)}
     ) VALUES (
       {",\n  ".join(f":{k}" for k in data)}
     )
@@ -137,20 +138,38 @@ def insert(con, table_name, data: dict):
 
 
 def update(con, table_name, data: dict, where: dict):
+    conditions = [makeEqCondition(k, v) for k, v in where.items()]
     sql = f"""
     UPDATE {table_name}
     SET
-      {", ".join(f"{k} = {handleSqlValue(v)}" for k, v in data.items())}
+      {", ".join(f"{k} = ?" for k in data)}
     WHERE
-      {" AND ".join(makeEqCondition(k, v) for k, v in where.items())}
+      {" AND ".join(v[0] for v in conditions)}
     """
     print(sql)
-    return con.execute(sql, data)
+    params = list(data.values()) + [v[1] for v in conditions]
+    print(params)
+    return con.execute(sql, params)
 
 
 class ScreenCls:
     def __init__(self, con):
         self.con = con
+
+    def _search(self, params, table_name, order_by):
+        conditions = [makeEqCondition(k, v) for k, v in params.items()]
+        sql = f"""
+            SELECT
+                rowid as id,
+                *
+            FROM {table_name}
+            {"" if len(params) == 0 else f"WHERE {' AND '.join(v[0] for v in conditions)}"}
+            ORDER BY {", ".join(order_by)}
+        """
+        print(sql)
+        params = [v[1] for v in conditions]
+        print(params)
+        return self.con.execute(sql, params).fetchall()
 
     def run_insert(self, table_name, data):
         print("insert", table_name, data)
@@ -175,16 +194,7 @@ class ScreenCls:
 
 class ScreenMaster(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                screen.screen_id as id,
-                screen.*
-            FROM screen
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY screen_id
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "screen", ["screen_cd"])
 
     def update(self, update):
         self._update("screen", update)
@@ -192,16 +202,7 @@ class ScreenMaster(ScreenCls):
 
 class ColumnMaster(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                column.column_id as id,
-                column.*
-            FROM column
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY view_order, column_cd, column_name
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "column", ["view_order", "column_cd"])
 
     def update(self, update):
         self._update("column", update)
@@ -209,16 +210,7 @@ class ColumnMaster(ScreenCls):
 
 class CarList(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                car.rowid as id,
-                car.*
-            FROM car
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY car.make, car.model
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "car", ["make", "model"])
 
     def update(self, update):
         self._update("car", update)
@@ -226,16 +218,7 @@ class CarList(ScreenCls):
 
 class ClassMaster(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                class_master.rowid as id,
-                class_master.*
-            FROM class_master
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY 1, 2, 3
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "class_master", ["screen_id", "class_cd"])
 
     def update(self, update):
         self._update("class_master", update)
@@ -243,19 +226,11 @@ class ClassMaster(ScreenCls):
 
 class ClassDtlMaster(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                class_dtl_master.rowid as id,
-                class_dtl_master.*
-            FROM class_dtl_master
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY 1, 2, 3
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "class_dtl_master", ["class_id", "class_dtl_cd"])
 
     def update(self, update):
         self._update("class_dtl_master", update)
+
 
 class RowStyleMaster(ScreenCls):
     def search(self, params):
