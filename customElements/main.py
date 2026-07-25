@@ -64,19 +64,34 @@ async def getClass(code: str, dbConnection: DbConnection):
 # }
 
 
+def getRowStyle(con, screen_cd: str):
+    columnOptions = con.execute(
+        """
+SELECT
+    row_style.row_style_code_condition as code,
+    row_style.row_style_code_style as style
+FROM row_style
+JOIN screen ON screen.screen_id = row_style.screen_id
+WHERE screen_cd = :screen_cd
+ORDER BY row_style_cd
+""",
+        {"screen_cd": screen_cd},
+    ).fetchall()
+    return columnOptions
+
+
 def getColumnOptions(con, screen_cd: str):
-    with con:
-        columnOptions = con.execute(
-            """
-    SELECT *
-    FROM column
-    JOIN screen ON screen.screen_id = column.screen_id
-    WHERE screen_cd = :screen_cd
-    ORDER BY view_order, column_cd, column_name
-    """,
-            {"screen_cd": screen_cd},
-        ).fetchall()
-        return columnOptions
+    columnOptions = con.execute(
+        """
+SELECT *
+FROM column
+JOIN screen ON screen.screen_id = column.screen_id
+WHERE screen_cd = :screen_cd
+ORDER BY view_order, column_cd, column_name
+""",
+        {"screen_cd": screen_cd},
+    ).fetchall()
+    return columnOptions
 
 
 @app.get("/getColumns")
@@ -85,7 +100,9 @@ async def getColumns(screenCd: str, dbConnection: DbConnection):
     for col in columnOptions:
         if col["type"] == "dropdown":
             col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
-    return {"columnOptions": columnOptions}
+
+    rowStyles = getRowStyle(dbConnection, screenCd)
+    return {"columnOptions": columnOptions, 'rowStyles': rowStyles}
 
 
 def handleSqlValue(v):
@@ -240,6 +257,22 @@ class ClassDtlMaster(ScreenCls):
     def update(self, update):
         self._update("class_dtl_master", update)
 
+class RowStyleMaster(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                row_style.rowid as id,
+                row_style.*
+            FROM row_style
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY 1, 2, 3
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("row_style", update)
+
 
 def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
     screen_cd = screenCd
@@ -253,6 +286,8 @@ def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
         return ClassMaster(con)
     if screen_cd == "class_dtl_master":
         return ClassDtlMaster(con)
+    if screen_cd == "row_style_master":
+        return RowStyleMaster(con)
     raise Exception("invalid screen code")
 
 
