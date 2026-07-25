@@ -1,18 +1,7 @@
-class SearchForm extends HTMLFormElement {
+export class SearchForm extends HTMLFormElement {
   #columnOptions = undefined
-  #agGridApi = undefined;
-  #classOptions = new Map();
-  async #fetchOption() {
-    if (!this.#columnOptions) {
-      this.#columnOptions = await fetch("/getColumns", { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
-    }
-    return this.#columnOptions;
-  }
-
   connectedCallback() {
-    this.#setupSearchForm().then(async _ => {
-      this.#setupAgGrid();
-    });
+    this.#setupSearchForm()
   }
 
   get agGrid() {
@@ -23,50 +12,19 @@ class SearchForm extends HTMLFormElement {
     return this.setAttribute("agGrid", value);
   }
 
-  defaultColDef = {
-    filter: true,
-    editable: true,
+  get #agGridElement() {
+    return document.querySelector(this.agGrid);
   }
 
-  async #convertToAgGridColumnDefs(columnOptions) {
-    const columnDefs = []
-    for (const colOpt of columnOptions) {
-      const colDef = {...colOpt}
-      colDef.headerName = colOpt.viewName
-      columnDefs.push(colDef);
+  async #fetchOption() {
+    if (!this.#columnOptions) {
+      this.#columnOptions = await fetch("/getColumns", { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
     }
-    return columnDefs;
-  }
-
-  async #setupAgGrid() {
-    const gridOptions = {
-      rowData: this.rowData,
-      columnDefs: await this.#convertToAgGridColumnDefs(this.#columnOptions),
-      defaultColDef: this.defaultColDef,
-      columnTypes: {
-        "dropdown": {
-          cellEditor: 'agSelectCellEditor',
-          cellEditorParams: (params) => { 
-            return {
-              values: params.colDef?.classes?.map(v => v.value)
-            }
-          },
-          valueFormatter: (params) => {
-            return params.colDef?.classes?.find(v => params.value == v.value)?.name;
-          },
-          valueParser: (params) => {
-            return params.colDef?.classes?.find(v => params.newValue == v.name)?.value;
-          }
-        }
-      }
-    };
-    const myGridElement = document.querySelector(this.agGrid);
-    this.#agGridApi = agGrid.createGrid(myGridElement, gridOptions);
+    return this.#columnOptions.columnOptions;
   }
 
   async #setupSearchForm() {
     const options = await this.#fetchOption();
-    console.log(options)
     const customElements = Array.from(this.children)
     let index = -1;
     for (const option of options) {
@@ -85,12 +43,27 @@ class SearchForm extends HTMLFormElement {
           elm.type = "number";
           break;
         case "checkbox":
-          elm = document.createElement("input");
-          elm.type = "checkbox";
+          elm = document.createElement("select");
+          let opt
+          if (!option.required) {
+            opt = document.createElement("option");
+            elm.append(opt);
+          }
+          opt = document.createElement("option");
+          opt.textContent = "true のみ";
+          opt.value = "true";
+          elm.append(opt);
+          opt = document.createElement("option");
+          opt.textContent = "false のみ";
+          opt.value = "false";
+          elm.append(opt);
           break;
         case "date":
           elm = document.createElement("input");
           elm.type = "date";
+          break;
+        case "autoCalc":
+          /* 自動計算は飛ばす */
           break;
         default:
           console.warn(option);
@@ -114,33 +87,52 @@ class SearchForm extends HTMLFormElement {
 
     const div = document.createElement("div")
     const elm = document.createElement("button")
+    elm.id = "searchButton"
     elm.name = "action";
     elm.value = "search";
     elm.textContent = "検索";
-    elm.addEventListener('click', (e) => this.#clickSearchButton(e));
+    elm.addEventListener('click', (e) => {
+      e.preventDefault();
+      this.search(e);
+    })
     div.append(elm);
     this.append(div)
   }
 
-  #clickSearchButton(e) {
-    e.preventDefault();
-    const formData = new FormData(this, e.target);
+  async search() {
+    const formData = new FormData(this, this.querySelector("#searchButton"));
     const request = {}
     for (const [key, data] of formData) {
       if (data != "") {
-        request[key] = data
+        const opt = (await this.#fetchOption()).find(o => o.field === key);
+        if (!opt) {
+          continue
+        }
+        switch (opt.type) {
+          case "checkbox":
+            if (data == "true") {
+              request[key] = true;
+            } else if (data == "false") {
+              request[key] = false;
+            }
+          default:
+            request[key] = data
+        }
       }
     }
-    // console.log(request);
     this.#search(request).then(result => {
-      if (this.#agGridApi) {
-        this.#agGridApi.setGridOption('rowData', result)
+      if (this.#agGridElement) {
+        try {
+          this.#agGridElement.setRowData(result)
+        } catch (e) {
+          throw e;
+        }
       }
     });
   }
 
   async #search(request) {
-    return await fetch("/search", { header: { "Content-Type": "application/json" } }).then(r => r.json())
+    return await fetch("/search", { headers: { "Content-Type": "application/json" }, method: "POST", body: JSON.stringify(request) }).then(r => r.json())
   }
 }
 

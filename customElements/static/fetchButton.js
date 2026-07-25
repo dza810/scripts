@@ -1,4 +1,4 @@
-class FetchButton extends HTMLButtonElement {
+export class FetchButton extends HTMLButtonElement {
   constructor() {
     super();
   }

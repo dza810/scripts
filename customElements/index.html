@@ -2,23 +2,22 @@
 <html>
   <head>
     <meta charset="utf-8">
+    <script type="module" src="/static/fetchButton.js"></script>
+    <script type="module" src="/static/classSelect.js"></script>
+    <script type="module" src="/static/searchForm.js"></script>
+    <script type="module" src="/static/AgGrid.js"></script>
+    <script type="module" src="/static/submitButton.js"></script>
     <script src="/static/index.js"></script>
-    <script src="/static/fetchButton.js"></script>
-    <script src="/static/classSelect.js"></script>
-    <script src="/static/searchForm.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
   </head>
   <body>
-    <form is="search-form" agGrid="#myGrid">
-      <input name="x" value="a">
-    </form>
-    <div id="myGrid" style="height: 500px"></div>
-    <div>bottom</div>
-    <script>
-      /*
-      (async function(){
-      })();
-      */
-    </script>
+    <style>
+.update-color {
+  background: green;
+}
+    </style>
+    <form is="search-form" agGrid="#myGrid"></form>
+    <div is="ag-grid" id="myGrid" style="height: 500px"></div>
+    <button is="submit-button" id="register" agGrid="#myGrid" api="/register">更新</button>
   </body>
 </html>

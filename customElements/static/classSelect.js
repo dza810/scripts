@@ -1,4 +1,4 @@
-class ClassSelect extends HTMLSelectElement {
+export class ClassSelect extends HTMLSelectElement {
   #abortController = undefined;
   #isConnected = false;
   #previousCode = null;
@@ -53,8 +53,12 @@ class ClassSelect extends HTMLSelectElement {
     const options = []
     for(const opt of opts) {
       const option = document.createElement("option")
-      option.value = opt.value;
-      option.textContent = opt.name ?? "";
+      if(opt.value) {
+        option.value = opt.value;
+      }
+      if(opt.name) {
+        option.textContent = opt.name;
+      }
       options.push(option);
     }
     this.append(...options);
