@@ -22,3 +22,5 @@ const setupLoadingDialog = (message=null) => {
   return loadingDialog;
 }
 
+const url = new URL(document.location.href)
+window.screenCd = url.searchParams.get("screenCd")

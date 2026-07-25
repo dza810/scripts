@@ -18,7 +18,7 @@ export class SearchForm extends HTMLFormElement {
 
   async #fetchOption() {
     if (!this.#columnOptions) {
-      this.#columnOptions = await fetch("/getColumns", { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+      this.#columnOptions = await fetch(`/getColumns?screenCd=${window.screenCd}`, { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
     }
     return this.#columnOptions.columnOptions;
   }
@@ -33,7 +33,7 @@ export class SearchForm extends HTMLFormElement {
       switch (option.type) {
         case "dropdown":
           elm = document.createElement("select", { is: "class-select" });
-          elm.code = option.code
+          elm.code = option.column_cd
           break;
         case "text":
           elm = document.createElement("input");
@@ -71,7 +71,7 @@ export class SearchForm extends HTMLFormElement {
 
       if (elm) {
         const div = document.createElement("div");
-        elm.name = option.field ?? `index-${index}`
+        elm.name = option.column_name ?? `index-${index}`
         elm.required = !!(option.required ?? false);
         const label = document.createElement("label")
         label.textContent = option.viewName ?? elm.name;
@@ -101,26 +101,26 @@ export class SearchForm extends HTMLFormElement {
 
   async search() {
     const formData = new FormData(this, this.querySelector("#searchButton"));
-    const request = {}
+    const params = {}
     for (const [key, data] of formData) {
       if (data != "") {
-        const opt = (await this.#fetchOption()).find(o => o.field === key);
+        const opt = (await this.#fetchOption()).find(o => o.column_cd === key);
         if (!opt) {
           continue
         }
         switch (opt.type) {
           case "checkbox":
             if (data == "true") {
-              request[key] = true;
+              params[key] = true;
             } else if (data == "false") {
-              request[key] = false;
+              params[key] = false;
             }
           default:
-            request[key] = data
+            params[key] = data
         }
       }
     }
-    this.#search(request).then(result => {
+    this.#search(params).then(result => {
       if (this.#agGridElement) {
         try {
           this.#agGridElement.setRowData(result)
@@ -131,8 +131,12 @@ export class SearchForm extends HTMLFormElement {
     });
   }
 
-  async #search(request) {
-    return await fetch("/search", { headers: { "Content-Type": "application/json" }, method: "POST", body: JSON.stringify(request) }).then(r => r.json())
+  async #search(params) {
+    return await fetch(`/search?screenCd=${window.screenCd}`, {
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+      body: JSON.stringify({ screenCd: window.screenCd, params })
+    }).then(r => r.json())
   }
 }
 

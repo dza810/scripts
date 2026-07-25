@@ -20,7 +20,7 @@ export class AgGridDiv extends HTMLDivElement {
         return;
       }
       const cellStyleCodeStyle = params.colDef?.cellStyleCodeStyle;
-      const code = params.colDef?.cellStyleCode
+      const code = params.colDef?.cellStyleCodeCondition
       if (!code || !cellStyleCodeStyle) { return }
       const result = this.#safeEval(params, code)
       if (result) {
@@ -30,8 +30,7 @@ export class AgGridDiv extends HTMLDivElement {
     },
     cellClassRules: {
       'update-color': params => {
-        if (params.data.isUpdated) {
-          params.data.isUpdated = true;
+        if (params.data.__isUpdated) {
           const field = params.colDef.field;
           if (!field) {
             return false;
@@ -46,7 +45,7 @@ export class AgGridDiv extends HTMLDivElement {
     },
     onCellValueChanged: (params) => {
       if (params.oldValue !== params.newValue) {
-        params.data.isUpdated = true;
+        params.data.__isUpdated = true;
         params.api.refreshCells({
           force: true
         });
@@ -61,7 +60,7 @@ export class AgGridDiv extends HTMLDivElement {
 
   async #fetchOption() {
     if (!this.#agGridOptions) {
-      this.#agGridOptions = await fetch("/getColumns", { headers: { 'Content-Type': 'application/json' } })
+      this.#agGridOptions = await fetch(`/getColumns?screenCd=${window.screenCd}`, { headers: { 'Content-Type': 'application/json' } })
         .then(r => r.json());
     }
     return this.#agGridOptions;
@@ -71,7 +70,8 @@ export class AgGridDiv extends HTMLDivElement {
     const columnDefs = []
     for (const colOpt of columnOptions) {
       const colDef = { ...colOpt }
-      colDef.headerName = colOpt.viewName
+      colDef.headerName = colOpt.column_name
+      colDef.field = colOpt.column_cd
       columnDefs.push(colDef);
     }
     return columnDefs;
@@ -80,6 +80,7 @@ export class AgGridDiv extends HTMLDivElement {
   async #setupAgGrid() {
     this.#agGridOptions = await this.#fetchOption();
     const { columnOptions, rowStyles } = this.#agGridOptions;
+    console.log(columnOptions)
     const gridOptions = {
       rowData: this.rowData,
       columnDefs: await this.#convertToAgGridColumnDefs(columnOptions),
@@ -89,7 +90,7 @@ export class AgGridDiv extends HTMLDivElement {
           cellEditor: 'agSelectCellEditor',
           cellEditorParams: (params) => {
             return {
-              values: params.colDef?.classes?.map(v => v.value)
+              values: params.colDef?.classes?.map(v => v.value) ?? []
             }
           },
           valueFormatter: (params) => {
@@ -113,10 +114,15 @@ export class AgGridDiv extends HTMLDivElement {
           cellDataType: "number"
         },
         "boolean": {
-          cellDataType: "boolean"
+          cellDataType: "boolean",
+          cellRenderer: 'agCheckboxCellRenderer',
         },
         "checkbox": {
-          cellDataType: "boolean"
+          cellDataType: "boolean",
+          cellRenderer: 'agCheckboxCellRenderer',
+          valueGetter: (params) => {
+            return params.data[params.colDef.field] == 1
+          }
         },
         "date": {
           cellDataType: "date"
@@ -124,7 +130,7 @@ export class AgGridDiv extends HTMLDivElement {
       },
       getRowStyle: params => {
         const style = {}
-        for (const rowStyle of rowStyles) {
+        for (const rowStyle of (rowStyles ?? [])) {
           if (!rowStyle.code || !rowStyle.style) {
             continue;
           }
@@ -155,16 +161,33 @@ export class AgGridDiv extends HTMLDivElement {
   }
 
   getUpdateData() {
-    const beforeList = []
-    const afterList = []
+    const insertList = []
+    const deleteList = []
+    const updateList = []
     this.#agGridApi.forEachNode((node) => {
-      const data = node.data;
-      if (data.isUpdated) {
-        beforeList.push(this.#originalData.get(data.id));
-        afterList.push({ ...data, changeType: "update" });
+      const data = node.data
+      if (data.__isUpdated) {
+        const updateData = {}
+        const beforeData = this.#originalData.get(data.id);
+        for (const [colKey, colValue] of Object.entries(data)) {
+          if (colKey == "__isUpdated") {
+            continue
+          }
+          const beforeValue = beforeData[colKey]
+          console.log(colKey, 'before=', beforeValue, 'after=', colValue)
+          if (colValue != beforeValue) {
+            updateData[colKey] = colValue
+            console.log(updateData)
+          }
+        }
+        console.log(updateData)
+        if (Object.keys(updateData).length > 0) {
+          updateData.id = data.id;
+          updateList.push(updateData)
+        }
       }
     });
-    return { afterList, beforeList }
+    return { insertList, deleteList, updateList }
   }
 }
 

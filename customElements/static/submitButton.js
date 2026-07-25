@@ -19,9 +19,21 @@ class SubmitButton extends HTMLButtonElement {
     this.setAttribute("agGrid", value);
   }
 
+  get searchForm() {
+    return this.getAttribute("searchForm")
+  }
+
+  set searchForm(value) {
+    this.setAttribute("searchForm", value)
+  }
+
   getAgGridElement() {
     console.log(this.agGrid);
     return document.querySelector(this.agGrid)
+  }
+
+  getSearchFormElement() {
+    return document.querySelector(this.searchForm)
   }
 
   connectedCallback() {
@@ -31,12 +43,13 @@ class SubmitButton extends HTMLButtonElement {
   #setup() {
     this.addEventListener("click", async () => {
       console.log("click")
-      const { beforeList, afterList } = this.getAgGridElement().getUpdateData()
-      await fetch(this.api, {
+      const updateData = this.getAgGridElement().getUpdateData()
+      await fetch(this.api + `?screenCd=${window.screenCd}`, {
         headers: { "Content-Type": "application/json" },
         method: "POST",
-        body: JSON.stringify({ beforeList, afterList })
+        body: JSON.stringify(updateData)
       })
+      this.getSearchFormElement().search()
     })
   }
 }

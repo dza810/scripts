@@ -1,10 +1,25 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
-from typing import Any
-from pydantic import BaseModel, Json
-from asyncio import sleep
-from fastapi.staticfiles import StaticFiles
+import sqlite3
+from typing import Any, Annotated
 
+from fastapi import FastAPI, Request, Depends
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+
+def dict_factory(cursor, row):
+    fields = [column[0] for column in cursor.description]
+    return {key: value for key, value in zip(fields, row)}
+
+
+async def get_connection():
+    with sqlite3.connect("data.db") as con:
+        con.row_factory = dict_factory
+        con.autocommit = False
+        yield con
+
+
+DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -15,113 +30,248 @@ async def root():
     return FileResponse("index.html")
 
 
-def _getClass(code: str):
-    if code == "make":
-        out = []
-        for v in ["Tesla", "Ford", "Toyota"]:
-            out.append({"value": "cd" + v, "name": v})
-        return out
-
-    for i in range(3):
-        out.append({"value": str(i), "name": f"{code}-{i}"})
-
-    return out
+def _getClass(con, class_cd: str):
+    return con.execute("""
+      SELECT
+        class_dtl_cd as value,
+        class_dtl_name as name
+      FROM class_dtl_master
+      JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
+      WHERE class_master.class_cd = :class_cd
+      ORDER BY class_dtl_master.view_order
+      """, {'class_cd': class_cd}).fetchall()
 
 
 @app.get("/getClass")
-async def getClass(code: str, request: Request):
-    return _getClass(code)
+async def getClass(code: str, dbConnection: DbConnection):
+    return _getClass(dbConnection, code)
+
+
+# columns = {
+#     "carList": {
+#         "columnOptions ": [],
+#         "rowStyles ": [
+#             {
+#                 "code": """ getField("electric") """,
+#                 "style": """ { "background-color": "yellow" } """,
+#             },
+#             {
+#                 "code": """ getField("model") == "Model Y" """,
+#                 "style": """ { "background-color": "gray" } """,
+#             },
+#         ],
+#     }
+# }
+
+
+def getColumnOptions(con, screen_cd: str):
+    with con:
+        columnOptions = con.execute(
+            """
+    SELECT *
+    FROM column
+    JOIN screen ON screen.screen_id = column.screen_id
+    WHERE screen_cd = :screen_cd
+    ORDER BY view_order, column_cd, column_name
+    """,
+            {"screen_cd": screen_cd},
+        ).fetchall()
+        return columnOptions
 
 
 @app.get("/getColumns")
-async def getColumns():
-    columnOptions = [
-        {
-            "type": "dropdown",
-            "field": "make",
-            "code": "make",
-            "classes": _getClass("make"),
-        },
-        {
-            "type": "autoCalc",
-            "viewName": "自動計算",
-            "code": """getField("make")+"123" """,
-        },
-        {"type": "text", "field": "model", "required": True},
-        {
-            "type": "number",
-            "field": "price",
-            "cellStyleCode": """getField('price') > 30000""",
-            "cellStyleCodeStyle": """ { "background-color": "red" } """,
-        },
-        {
-            "type": "checkbox",
-            "field": "electric",
-        },
-    ]
-    rowStyles = [
-        {
-            "code": """ getField("electric") """,
-            "style": """ { "background-color": "yellow" } """,
-        },
-        {
-            "code": """ getField("model") == "Model Y" """,
-            "style": """ { "background-color": "gray" } """,
-        },
-    ]
-    return {"rowStyles": rowStyles, "columnOptions": columnOptions}
+async def getColumns(screenCd: str, dbConnection: DbConnection):
+    columnOptions = getColumnOptions(dbConnection, screenCd)
+    for col in columnOptions:
+        if col["type"] == "dropdown":
+            col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
+    return {"columnOptions": columnOptions}
 
 
-data = [
-    {"id": 1, "make": "cdTesla", "model": "Model Y", "price": 64950, "electric": False},
-    {"id": 2, "make": "cdFord", "model": "F-Series", "price": 33850, "electric": False},
-    {
-        "id": 3,
-        "make": "cdToyota",
-        "model": "Corolla",
-        "price": 29600,
-        "electric": False,
-    },
-    {"id": 4, "make": "cdTesla", "model": "Model Y2", "price": 64950, "electric": True},
-    {"id": 5, "make": "cdFord", "model": "F-Series2", "price": 33850, "electric": True},
-    {
-        "id": 6,
-        "make": "cdToyota",
-        "model": "Corolla2",
-        "price": 29600,
-        "electric": True,
-    },
-]
+def handleSqlValue(v):
+    if v is None:
+        return "NULL"
+    if isinstance(v, str):
+        return f"'{v}'"
+    if v is True:
+        return 1
+    if v is False:
+        return 0
+    return v
+
+
+def makeEqCondition(k, v):
+    if v is None:
+        return f"{k} is NULL"
+    else:
+        return f"{k} = {handleSqlValue(v)}"
+
+
+def insert(con, table_name, data: dict):
+    sql = f"""
+    INSERT INTO {table_name} (
+      {",\n  ".join(k for k in data)}
+    ) VALUES (
+      {",\n  ".join(f":{k}" for k in data)}
+    )
+    """
+    print(sql)
+    return con.execute(sql, {k: handleSqlValue(v) for k, v in data.items()})
+
+
+def update(con, table_name, data: dict, where: dict):
+    sql = f"""
+    UPDATE {table_name}
+    SET
+      {", ".join(f"{k} = {handleSqlValue(v)}" for k, v in data.items())}
+    WHERE
+      {" AND ".join(makeEqCondition(k, v) for k, v in where.items())}
+    """
+    print(sql)
+    return con.execute(sql, data)
+
+
+class ScreenCls:
+    def __init__(self, con):
+        self.con = con
+
+    def run_insert(self, table_name, data):
+        print("insert", table_name, data)
+        return insert(self.con, table_name, data)
+
+    def run_update(self, table_name, data, where):
+        print("update", table_name, data)
+        return update(self.con, table_name, data, where)
+
+    def _update(self, table_name, update):
+        for ins_row in update.insertList:
+            self.run_insert(table_name, ins_row)
+        for del_id in update.deleteList:
+            self.run_insert(table_name, {f"{table_name}_id": del_id})
+        for upd_row in update.updateList:
+            self.run_update(
+                table_name,
+                {k: v for k, v in upd_row.items() if k != "id"},
+                {f"{table_name}_id": upd_row["id"]},
+            )
+
+
+class ScreenMaster(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                screen.screen_id as id,
+                screen.*
+            FROM screen
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY screen_id
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("screen", update)
+
+
+class ColumnMaster(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                column.column_id as id,
+                column.*
+            FROM column
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY view_order, column_cd, column_name
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("column", update)
+
+
+class CarList(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                car.rowid as id,
+                car.*
+            FROM car
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY car.make, car.model
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("car", update)
+
+
+class ClassMaster(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                class_master.rowid as id,
+                class_master.*
+            FROM class_master
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY 1, 2, 3
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("class_master", update)
+
+
+class ClassDtlMaster(ScreenCls):
+    def search(self, params):
+        sql = f"""
+            SELECT
+                class_dtl_master.rowid as id,
+                class_dtl_master.*
+            FROM class_dtl_master
+            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
+            ORDER BY 1, 2, 3
+        """
+        print(sql)
+        return self.con.execute(sql).fetchall()
+
+    def update(self, update):
+        self._update("class_dtl_master", update)
+
+
+def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
+    screen_cd = screenCd
+    if screen_cd == "column_master":
+        return ColumnMaster(con)
+    if screen_cd == "screen_master":
+        return ScreenMaster(con)
+    if screen_cd == "car_list":
+        return CarList(con)
+    if screen_cd == "class_master":
+        return ClassMaster(con)
+    if screen_cd == "class_dtl_master":
+        return ClassDtlMaster(con)
+    raise Exception("invalid screen code")
+
+
+Screen = Annotated[ScreenCls, Depends(get_screen)]
 
 
 @app.post("/search")
-async def search(params: dict[str, Any]):
-    result = [d for d in data]
-    for k, v in params.items():
-        if v == "true":
-            v = True
-        elif v == "false":
-            v = False
-        if v != "":
-            result = [d for d in result if d.get(k) is None or d.get(k) == v]
-    return result
+async def search(
+    screen: Screen, params: dict[str, Any], dbConnection: DbConnection
+) -> list[dict[str, Any]]:
+    return screen.search(params["params"])
 
 
 class Register(BaseModel):
-    beforeList: list[dict[str, Any]]
-    afterList: list[dict[str, Any]]
+    updateList: list[dict]
+    deleteList: list[Any]
+    insertList: list[dict]
 
 
 @app.post("/register")
-async def register(update: Register):
-    global data
-    currentDataById = {d.get("id"): d for d in data}
-    print(currentDataById)
-    beforeDataById = {d.get("id"): d for d in update.beforeList}
-    print(beforeDataById)
-    for ad in update.afterList:
-        id_ = ad.get("id")
-        bd = beforeDataById.get(id_, {})
-        for k, av in ad.items():
-            if av != bd.get(k):
-                currentDataById[id_][k] = av
+async def register(screen: Screen, update: Register):
+    screen.update(update)
