@@ -1,7 +1,7 @@
 import sqlite3
-from typing import Any, Annotated
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Request, Depends
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
