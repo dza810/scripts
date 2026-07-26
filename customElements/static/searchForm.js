@@ -102,9 +102,10 @@ export class SearchForm extends HTMLFormElement {
   async search() {
     const formData = new FormData(this, this.querySelector("#searchButton"));
     const params = {}
+    const options = await this.#fetchOption()
     for (const [key, data] of formData) {
       if (data != "") {
-        const opt = (await this.#fetchOption()).find(o => o.column_cd === key);
+        const opt = options.find(o => o.column_cd === key);
         if (!opt) {
           continue
         }
@@ -115,6 +116,7 @@ export class SearchForm extends HTMLFormElement {
             } else if (data == "false") {
               params[key] = false;
             }
+            break
           default:
             params[key] = data
         }

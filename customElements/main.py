@@ -33,8 +33,7 @@ class InvalidKeyException(Exception):
 @app.exception_handler(InvalidKeyException)
 async def invalid_key_exception(request: Request, exc: InvalidKeyException):
     return JSONResponse(
-        status_code=418,
-        content={"message": f"invalid key: {exc.name}"}
+        status_code=418, content={"message": f"invalid key: {exc.name}"}
     )
 
 
@@ -75,6 +74,8 @@ def insert(con, table_name, data: dict):
 
 
 def update(con, table_name, data: dict, where: dict):
+    if len(data) == 0:
+        return None
     conditions = [makeEqCondition(k, v) for k, v in where.items()]
     sql = f"""
     UPDATE {table_name}
