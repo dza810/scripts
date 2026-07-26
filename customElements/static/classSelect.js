@@ -29,7 +29,7 @@ export class ClassSelect extends HTMLSelectElement {
   async #loadOptions() {
     const code = this.code;
     console.log('#loadOptions', code);
-    if(!this.#isConnected) {
+    if (!this.#isConnected) {
       return;
     }
 
@@ -37,7 +37,7 @@ export class ClassSelect extends HTMLSelectElement {
     this.#abortController?.abort();
 
     this.innerHTML = "";
-    if(!this.code) {
+    if (!this.code) {
       console.log('#loadOptions stop:', code)
       return;
     }
@@ -45,18 +45,18 @@ export class ClassSelect extends HTMLSelectElement {
     this.#abortController = new AbortController();
     const signal = this.#abortController.signal;
 
-    const opts = await this.#fetchOptions({signal});
-    if(!this.required) {
+    const opts = await this.#fetchOptions({ signal });
+    if (!this.required) {
       opts.unshift({})
     }
 
     const options = []
-    for(const opt of opts) {
+    for (const opt of opts) {
       const option = document.createElement("option")
-      if(opt.value) {
+      if (opt.value) {
         option.value = opt.value;
       }
-      if(opt.name) {
+      if (opt.name) {
         option.textContent = opt.name;
       }
       options.push(option);
@@ -65,20 +65,20 @@ export class ClassSelect extends HTMLSelectElement {
     this.disabled = false
   }
 
-  async #fetchOptions({signal}) {
-    if(this.#previousCode === this.code) {
+  async #fetchOptions({ signal }) {
+    if (this.#previousCode === this.code) {
       return this.#previousFetch;
-    } 
-    this.#previousFetch = await fetch(`/getClass?code=${this.code}`, { headers: { 'Content-Type': 'application/json' },  signal }).then(r => r.json());
+    }
+    this.#previousFetch = await runFetch(`/getClass?code=${this.code}`, { signal });
     return this.#previousFetch;
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
     console.log('attributeChangedCallback', name, oldValue, newValue);
-    switch(name) {
+    switch (name) {
       case "code":
       case "required":
-        if(oldValue !== newValue) {
+        if (oldValue !== newValue) {
           this.#loadOptions();
         }
         break;

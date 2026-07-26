@@ -134,11 +134,10 @@ export class SearchForm extends HTMLFormElement {
   }
 
   async #search(params) {
-    return await fetch(`/search?screenCd=${window.screenCd}`, {
-      headers: { "Content-Type": "application/json" },
+    return await runFetch(`/search`, {
       method: "POST",
-      body: JSON.stringify({ screenCd: window.screenCd, params })
-    }).then(r => r.json())
+      body: { params }
+    })
   }
 }
 

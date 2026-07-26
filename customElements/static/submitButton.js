@@ -44,10 +44,9 @@ class SubmitButton extends HTMLButtonElement {
     this.addEventListener("click", async () => {
       console.log("click")
       const updateData = this.getAgGridElement().getUpdateData()
-      await fetch(this.api + `?screenCd=${window.screenCd}`, {
-        headers: { "Content-Type": "application/json" },
+      await runFetch(this.api, {
         method: "POST",
-        body: JSON.stringify(updateData)
+        body: updateData
       })
       this.getSearchFormElement().search()
     })

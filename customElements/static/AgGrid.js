@@ -62,8 +62,7 @@ export class AgGridDiv extends HTMLDivElement {
 
   async #fetchOption() {
     if (!this.#agGridOptions) {
-      this.#agGridOptions = await fetch(`/getColumns?screenCd=${window.screenCd}`, { headers: { 'Content-Type': 'application/json' } })
-        .then(r => r.json());
+      this.#agGridOptions = await runFetch(`/getColumns`)
     }
     return this.#agGridOptions;
   }
