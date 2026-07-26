@@ -91,9 +91,9 @@ export class SearchForm extends HTMLFormElement {
     elm.name = "action";
     elm.value = "search";
     elm.textContent = "検索";
-    elm.addEventListener('click', (e) => {
+    elm.addEventListener('click', async (e) => {
       e.preventDefault();
-      this.search(e);
+      await this.search(e);
     })
     div.append(elm);
     this.append(div)
