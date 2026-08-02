@@ -312,21 +312,21 @@ def setup_search_form_condition(con):
     insert(con, table.name, {"condition_cd": "between", "condition_name": "間"})
 
 
-with connect() as con:
-    setup_screen_column(con)
-    setup_search_form_condition(con)
-    setup_row_style(con)
-    make_table(con, car_table, "car_list", "カーリスト")
-    setup_class_tables(con)
-
 # with connect() as con:
-#     sql = """
-#     SELECT
-#       *
-#     FROM screen
-#     ORDER BY 1,2,3
-#     """
-#     print(sql)
-#     print("---")
-#     pp = pprint.PrettyPrinter(indent=4)
-#     pp.pprint(con.execute(sql).fetchall())
+#     setup_screen_column(con)
+#     setup_search_form_condition(con)
+#     setup_row_style(con)
+#     make_table(con, car_table, "car_list", "カーリスト")
+#     setup_class_tables(con)
+
+with connect() as con:
+    # sql = """
+    # insert into search_form_condition (condition_cd, condition_name)values ('contains', '含む(スペース区切りで分割)')
+    # """
+    sql = """
+    select * from search_form_condition 
+    """
+    print(sql)
+    print("---")
+    pp = pprint.PrettyPrinter(indent=4)
+    pp.pprint(con.execute(sql).fetchall())

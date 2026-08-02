@@ -1,6 +1,7 @@
 from abc import abstractmethod, ABC
 import sqlite3
 from typing import Annotated, Any
+from loguru import logger
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -75,7 +76,7 @@ def insert(con, table_name, data: dict):
       {",\n  ".join(f":{k}" for k in data)}
     )
     """
-    print(sql)
+    logger.debug(sql)
     return con.execute(sql, {k: handleSqlValue(v) for k, v in data.items()})
 
 
@@ -90,9 +91,8 @@ def update(con, table_name, data: dict, where: dict):
     WHERE
       {" AND ".join(v[0] for v in conditions)}
     """
-    print(sql)
     params = list(data.values()) + [v[1] for v in conditions if v[1] is not None]
-    print(params)
+    logger.debug('sql=', sql, 'params=', params)
     return con.execute(sql, params)
 
 
@@ -106,10 +106,9 @@ def _getClass(con, class_cd):
       WHERE class_master.class_cd = :class_cd
       ORDER BY class_dtl_master.view_order
       """
-    print("_getClass")
-    print(sql)
-    print(class_cd)
-    return con.execute(sql, {"class_cd": class_cd}).fetchall()
+    params = {"class_cd": class_cd}
+    logger.debug('sql=', sql, 'params=', params)
+    return con.execute(sql, params).fetchall()
 
 
 class ScreenCls(ABC):
@@ -128,16 +127,28 @@ class ScreenCls(ABC):
         queries = []
         for key, value in params.items():
             option = options.get(key)
-            print(option)
+            assert option is not None
             query: tuple[str, Any] | None = None
             column_cd = option.get("column_cd")
             if column_cd is None:
                 continue
             match option["condition_cd"]:
                 case "equal":
-                    query = makeEqCondition(column_cd, value)
+                    queries.append(makeEqCondition(column_cd, value))
                 case "lesser_than_or_equal":
-                    query = f"`{column_cd}` <= ?", handleSqlValue(value)
+                    queries.append((f"`{column_cd}` <= ?", handleSqlValue(value)))
+                case "greater_than_or_equal":
+                    queries.append((f"? <= `{column_cd}`", handleSqlValue(value)))
+                case "between":
+                    value_from = value.get("from")
+                    if value_from:
+                        queries.append((f"`{column_cd}` >= ?", handleSqlValue(value_from)))
+                    value_to = value.get("to")
+                    if value_to:
+                        queries.append((f"`{column_cd}` <= ?", handleSqlValue(value_to)))
+                case "contains":
+                    for word in value.split(" "):
+                        queries.append((f"`{column_cd}` like ('%' || ? || '%')", handleSqlValue(word)))
                 case _:
                     print('skip', option)
             if query is not None:

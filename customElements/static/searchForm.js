@@ -1,40 +1,136 @@
-const searchFormImputFactory = {
-  "dropdown": (option) => {
-    const elm = document.createElement("select", { is: "class-select" });
-    elm.code = option.column_cd
-    return elm;
-  },
-  "text": () => {
-    const elm = document.createElement("input");
-    return elm;
-  },
-  "number": () => {
-    const elm = document.createElement("input");
-    elm.type = "number";
-    return elm;
-  },
-  "checkbox": (option) => {
-    const elm = document.createElement("select");
-    let opt
-    if (!option.required) {
-      opt = document.createElement("option");
-      elm.append(opt);
-    }
-    opt = document.createElement("option");
-    opt.textContent = "true のみ";
-    opt.value = "true";
-    elm.append(opt);
-    opt = document.createElement("option");
-    opt.textContent = "false のみ";
-    opt.value = "false";
-    elm.append(opt);
-    return elm;
-  },
-  "date": () => {
-    const elm = document.createElement("input");
-    elm.type = "date";
-    return elm;
+const searchFormInputClasses = new Map();
+
+const registerSearchFormInput = (clazz) => {
+  let name = clazz.name
+  if (name.endsWith("Input")) {
+    name = name.substring(0, name.indexOf("Input"))
   }
+  searchFormInputClasses.set(name.toLowerCase(), clazz)
+}
+
+class SearchFormInput {
+  option;
+  constructor(option) {
+    this.option = option
+  }
+
+  getName(additional_name) {
+    if (additional_name) {
+      return this.option.column_name + "::" + additional_name
+    } else {
+      return this.option.column_name
+    }
+  }
+
+  getViewName() {
+    return this.option.viewName ?? this.getName()
+  }
+
+  makeLabel() {
+    const label = document.createElement("label")
+    label.textContent = this.getViewName();
+    return label;
+  }
+
+  makeInput() {
+    return document.createElement("input");
+  }
+
+  setFormAttrsToInput(elm, additional_name) {
+    elm.name = this.getName(additional_name)
+    // ここに required が出てくるのは変?
+    elm.required = !!(this.option.required ?? false);
+  }
+
+  shouldMakeInput() {
+    return true;
+  }
+
+  make() {
+    if (!this.shouldMakeInput()) {
+      return
+    }
+    const div = document.createElement("div");
+    div.append(this.makeLabel())
+    if (this.option.condition_cd == "between") {
+      let elm = this.makeInput()
+      this.setFormAttrsToInput(elm, "from")
+      div.append(elm)
+      const span = document.createElement("span")
+      span.textContent = "~"
+      div.append(span)
+      elm = this.makeInput()
+      this.setFormAttrsToInput(elm, "to")
+      div.append(elm)
+    } else {
+      const elm = this.makeInput()
+      this.setFormAttrsToInput(elm)
+      div.append(elm)
+    }
+    return div;
+  }
+}
+
+registerSearchFormInput(
+  class DropdownInput extends SearchFormInput {
+    makeInput() {
+      const elm = document.createElement("select", { is: "class-select" });
+      elm.code = this.option.column_cd
+      return elm;
+    }
+  })
+
+registerSearchFormInput(
+  class TextInput extends SearchFormInput {
+    makeInput() {
+      const elm = document.createElement("input");
+      return elm;
+    }
+  })
+
+registerSearchFormInput(
+  class NumberInput extends SearchFormInput {
+    makeInput() {
+      const elm = document.createElement("input");
+      elm.type = "number";
+      return elm;
+    }
+  })
+
+registerSearchFormInput(
+  class CheckboxInput extends SearchFormInput {
+    makeInput() {
+      const elm = document.createElement("select");
+      let opt
+      if (!this.option.required) {
+        opt = document.createElement("option");
+        elm.append(opt);
+      }
+      opt = document.createElement("option");
+      opt.textContent = "true のみ";
+      opt.value = "true";
+      elm.append(opt);
+      opt = document.createElement("option");
+      opt.textContent = "false のみ";
+      opt.value = "false";
+      elm.append(opt);
+      return elm;
+    }
+  })
+
+registerSearchFormInput(
+  class DateInput extends SearchFormInput {
+    makeInput() {
+      const elm = document.createElement("input");
+      elm.type = "date";
+      return elm;
+    }
+  })
+
+const searchFormInputFactory = (option) => {
+  const clazz = searchFormInputClasses.get(option.type)
+  console.log(option, clazz)
+  return new clazz(option);
 }
 
 
@@ -65,26 +161,13 @@ export class SearchForm extends HTMLFormElement {
 
   async #setupSearchForm() {
     const options = await this.#fetchOption();
-    const customElements = Array.from(this.children)
+    const children = Array.from(this.children)
     for (const option of options) {
-      let factory = searchFormImputFactory?.[option.type];
-      if (!factory) {
-        console.warn('invalid option', option);
-        continue
-      }
-      const elm = factory(option)
-      if (elm) {
-        const div = document.createElement("div");
-        elm.name = option.search_form_cd
-        const label = document.createElement("label")
-        label.textContent = `(${option.condition_cd})${option.search_form_name ?? elm.name}`;
-        div.append(label);
-        div.append(elm);
-        this.append(div)
-      }
+      const div = searchFormInputFactory(option).make();
+      this.append(div);
     }
 
-    for (const elm of customElements) {
+    for (const elm of children) {
       this.append(elm);
     }
 
@@ -117,6 +200,16 @@ export class SearchForm extends HTMLFormElement {
             break
           default:
             params[key] = data
+        }
+        const keySplitted = key.split("::")
+        if (keySplitted.length >= 2) {
+          let paramsTmp = params;
+          for (const keyPart of keySplitted.slice(0, -1)) {
+            paramsTmp[keyPart] = paramsTmp[keyPart] ?? {}
+            paramsTmp = paramsTmp[keyPart]
+          }
+          paramsTmp[keySplitted.at(-1)] = data
+          delete params[key]
         }
       }
     }
