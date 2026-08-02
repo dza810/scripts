@@ -200,15 +200,8 @@ def test_screenCls_search_invalid_key(db_connection_with_tables):
         screen.search({'xxx': "abc"})
 
 
-def test_makeEqCondition():
-    assert makeEqCondition("col", 1) == ("`col` = ?", "1")
-    assert makeEqCondition("col", None) == ("`col` is NULL", None)
-    assert makeEqCondition("col", "abc") == ("`col` = ?", "abc")
-
-
 def test_insert_empty_data(db_connection):
     assert insert(db_connection, "test", {}) is None
-
 
 def test_update_empty_data(db_connection):
     assert update(db_connection, "test", {}, {"test_id": 1}) is None
@@ -239,6 +232,9 @@ def test_make_condition(db_connection_with_tables):
     screen = get_screen("car_list", db_connection_with_tables)
     assert screen.make_condition({"model": "Focus"}) == [("`model` = ?", "Focus")]
 
+def test_make_condition_multiple(db_connection_with_tables):
+    screen = get_screen("car_list", db_connection_with_tables)
+    assert screen.make_condition({"model": "Focus", "make": "cdFord"}) == [("`model` = ?", "Focus"), ("`make` = ?", "cdFord")]
 
 def test_make_condition_invalid_key(db_connection_with_tables):
     screen = get_screen("car_list", db_connection_with_tables)
@@ -304,6 +300,31 @@ def test_register_invalid_insert_key(db_connection_with_tables):
             deleteList=[],
             updateList=[],
         ))
+
+
+def test_register_delete(db_connection_with_tables):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    screen.update(Register(
+        insertList=[
+            {"make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1},
+            {"make": "Ford", "model": "Focus", "price": 30000, "electric": 0},
+        ],
+        deleteList=[],
+        updateList=[],
+    ))
+    rows = con.execute("SELECT * FROM car ORDER BY car_id").fetchall()
+    assert len(rows) == 2
+
+    target = screen.search({"make": "Ford"})[0]
+    screen.update(Register(
+        insertList=[],
+        deleteList=[target["id"]],
+        updateList=[],
+    ))
+    remaining = con.execute("SELECT * FROM car").fetchall()
+    assert len(remaining) == 1
+    assert remaining[0]["make"] == "Tesla"
 
 
 def test_getColumnOptions(db_connection_with_tables):

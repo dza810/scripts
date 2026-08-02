@@ -1,39 +1,34 @@
-from abc import abstractmethod, ABC
+import contextlib
 import sqlite3
+from abc import ABC, abstractmethod
 from typing import Annotated, Any
-from loguru import logger
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from loguru import logger
 from pydantic import BaseModel
-import contextlib
-import functools
 
 
 def dict_factory(cursor, row):
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
-
-
 """
 async なしの場合 fastapi が別スレッドで動かしてしまう。
 => handler メソッドで async にできるようにここにもつける
 """
 async def get_connection(dbname="data.db"):
-    with contextlib.closing(sqlite3.connect(dbname)) as con:
-        with con:
-            con.row_factory = dict_factory
-            con.autocommit = False
-            yield con
+    with contextlib.closing(sqlite3.connect(dbname)) as con, con:
+        con.row_factory = dict_factory
+        con.autocommit = False
+        yield con
 
 def get_connection_sync(dbname="data.db"):
-    with contextlib.closing(sqlite3.connect(dbname)) as con:
-        with con:
-            con.row_factory = dict_factory
-            con.autocommit = False
-            yield con
+    with contextlib.closing(sqlite3.connect(dbname)) as con, con:
+        con.row_factory = dict_factory
+        con.autocommit = False
+        yield con
 
 DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
@@ -180,7 +175,7 @@ class ScreenCls(ABC):
             queries.extend(self.make_condition_query(option, key, value))
         return queries
 
-    def run_search(self, table_name: str, order_by: list[str], params: dict[str, Any]):
+    def _search(self, params: dict[str, Any], table_name, order_by):
         logger.debug(table_name, order_by, params)
         conditions = self.make_condition(params)
         sql = f"""
@@ -196,9 +191,6 @@ class ScreenCls(ABC):
         logger.debug(paramsSql)
         return self.con.execute(sql, paramsSql).fetchall()
 
-    def _search(self, params: dict[str, Any], table_name, order_by):
-        return self.run_search(table_name, order_by, params)
-
     def run_insert(self, table_name, data):
         logger.debug("insert", table_name, data)
         self._check_column_key(data.keys())
@@ -211,7 +203,6 @@ class ScreenCls(ABC):
 
     def run_delete(self, table_name, where):
         logger.debug("delete", table_name)
-        self._check_column_key(where.keys())
         return delete(self.con, table_name, where)
 
     def _update(self, table_name, update):
