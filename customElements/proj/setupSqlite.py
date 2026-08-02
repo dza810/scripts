@@ -178,7 +178,7 @@ def create_table_sql(table):
                     f"`{col.code}`",
                     col.data_type,
                     "NOT NULL" if col.not_null else None,
-                    f"DEFAULT `{col.default}`" if col.default is not None else None,
+                    f"DEFAULT {"'" + col.default + "'" if isinstance(col.default, str) else col.default }" if col.default is not None else None,
                 ]
                 if v != "" and v is not None
             )

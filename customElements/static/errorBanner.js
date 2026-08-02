@@ -11,8 +11,8 @@ export class ErrorBanner extends HTMLDivElement {
       console.log(`error: ${event.message}`, event)
     })
     window.addEventListener('unhandledrejection', (event) => {
-      this.textContent = `error(promise): ${event?.message}`
-      console.log(`error(promise): ${event.message}`, event)
+      this.textContent = `error(promise): ${event?.reason}`
+      console.log(`error(promise): ${event.reason}`, event)
     });
   }
 }

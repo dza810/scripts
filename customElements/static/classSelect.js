@@ -70,6 +70,7 @@ export class ClassSelect extends HTMLSelectElement {
       return this.#previousFetch;
     }
     this.#previousFetch = await runFetch(`/getClass?code=${this.code}`, { signal });
+    this.#previousCode = this.code
     return this.#previousFetch;
   }
 
