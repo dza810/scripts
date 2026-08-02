@@ -1,4 +1,3 @@
-import pprint
 import sqlite3
 from typing import Any
 

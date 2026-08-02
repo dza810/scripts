@@ -4,7 +4,33 @@ import pytest
 from fastapi.testclient import TestClient
 
 from proj import setupSqlite
-from proj.main import *
+from proj.db import (
+    delete,
+    dict_factory,
+    get_connection_sync,
+    getClass,
+    handleSqlValue,
+    insert,
+    makeEqCondition,
+    quote_ident,
+    select,
+    update,
+)
+from proj.main import (
+    CarList,
+    ClassDtlMaster,
+    ClassMaster,
+    ColumnMaster,
+    InvalidKeyException,
+    InvalidScreenException,
+    Register,
+    RowStyleMaster,
+    ScreenMaster,
+    SearchFormMaster,
+    app,
+    get_connection,
+    get_screen,
+)
 
 client = TestClient(app)
 
@@ -139,6 +165,94 @@ def test_update(db_connection):
     assert result[1] == insert_data[1] | {'test_id': 2}
 
 
+def test_insert_injection_value(db_connection):
+    data = {
+        "uk_num1": 1,
+        "uk_text1": "a",
+        "uk_bool1": 0,
+        "text2": "'); DROP TABLE test; --",
+    }
+    insert(db_connection, "test", data)
+    insert(db_connection, "test", {
+        "uk_num1": 2,
+        "uk_text1": "b",
+        "uk_bool1": 0,
+        "text2": "safe",
+    })
+    result = db_connection.execute("SELECT * FROM test ORDER BY rowid").fetchall()
+    assert len(result) == 2
+    assert result[0]["text2"] == "'); DROP TABLE test; --"
+
+
+def test_update_injection_value(db_connection):
+    insert_data = {
+        "test_id": 1,
+        "uk_num1": 1,
+        "uk_text1": "a",
+        "uk_bool1": 0,
+        "text2": "before",
+    }
+    insert(db_connection, "test", insert_data)
+    update(
+        db_connection,
+        "test",
+        {"text2": "'); DROP TABLE test; --"},
+        {"test_id": 1},
+    )
+    result = db_connection.execute("SELECT * FROM test").fetchall()
+    assert len(result) == 1
+    assert result[0]["text2"] == "'); DROP TABLE test; --"
+
+
+def test_delete_injection_value(db_connection):
+    insert(db_connection, "test", {
+        "test_id": 1,
+        "uk_num1": 1,
+        "uk_text1": "a",
+        "uk_bool1": 0,
+        "text2": "x",
+    })
+    insert(db_connection, "test", {
+        "test_id": 2,
+        "uk_num1": 2,
+        "uk_text1": "b",
+        "uk_bool1": 0,
+        "text2": "y",
+    })
+    delete(db_connection, "test", {"test_id": "' OR '1'='1"})
+    result = db_connection.execute("SELECT * FROM test ORDER BY rowid").fetchall()
+    assert len(result) == 2
+
+
+def test_select_injection_value(db_connection_with_tables):
+    con = db_connection_with_tables
+    insert(con, "car", {"make": "Tesla", "model": "Model 3", "price": 100, "electric": 1})
+    insert(con, "car", {"make": "Ford", "model": "Focus", "price": 200, "electric": 0})
+    screen = get_screen("car_list", con)
+    result = screen.search({"model": "' OR '1'='1"})
+    assert result == []
+    result = screen.search({"model": "Focus"})
+    assert len(result) == 1
+    assert result[0]["make"] == "Ford"
+
+
+def test_getClass_injection_value(db_connection_with_tables):
+    con = db_connection_with_tables
+    cur = insert(con, "class_master", {
+        "class_cd": "testclass",
+        "class_name": "テスト区分",
+    })
+    assert cur is not None
+    insert(con, "class_dtl_master", {
+        "class_id": cur.lastrowid,
+        "class_dtl_cd": "testclass_1",
+        "class_dtl_name": "テストクラス1",
+        "view_order": 10,
+    })
+    assert getClass(con, "' OR '1'='1") == []
+    assert getClass(con, "testclass') --") == []
+
+
 def test_getClass(db_connection_with_tables):
     con = db_connection_with_tables
     cur = insert(con, "class_master", {
@@ -224,8 +338,7 @@ def test_update_empty_data(db_connection):
 ])
 def test_make_condition_query(db_connection_with_tables, condition_cd, value, expected):
     screen = get_screen("car_list", db_connection_with_tables)
-    option = {"column_cd": "price", "condition_cd": condition_cd}
-    assert screen.make_condition_query(option, "price", value) == expected
+    assert screen.make_condition_query("price", condition_cd, value) == expected
 
 
 def test_make_condition(db_connection_with_tables):
@@ -448,4 +561,298 @@ def test_api_getSearchForms(api_client):
     r = api_client.get("/getSearchForms", params={"screenCd": "car_list"})
     assert r.status_code == 200
     assert [f["search_form_cd"] for f in r.json()] == ["make", "model", "price", "electric"]
+
+
+# -------------------------------------------------------------
+# SQLインジェクション対策のテスト
+# -------------------------------------------------------------
+def _insert_cars(con):
+    insert(con, "car", {"make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1})
+    insert(con, "car", {"make": "Ford", "model": "Focus", "price": 30000, "electric": 0})
+
+
+SEARCH_INJECTION_VALUES = [
+    # boolean-based
+    "' OR '1'='1",
+    "' OR '1'='1' --",
+    "' OR 1=1--",
+    "' OR 1=1 #",
+    "' AND '1'='1",
+    "' AND 1=1--",
+    "' AND 1=2--",
+    "' OR 1=1/*",
+    # union-based
+    "' UNION SELECT 1,2,3,4--",
+    "' UNION SELECT make, model, price, electric FROM car--",
+    "' UNION SELECT NULL, NULL, NULL, NULL--",
+    # error-based
+    "' AND extractvalue(1, concat(0x7e, version()))--",
+    "' AND 1=CONVERT(int, @@version)--",
+    # time-based
+    "' AND (SELECT IF(1=1, SLEEP(5), 0))--",
+    "'; WAITFOR DELAY '0:0:5'--",
+    # stacked queries
+    "'; DROP TABLE car;--",
+    "'); DROP TABLE car; --",
+    "' OR 1=1; DROP TABLE car;--",
+    # getClass 経由の注入
+    "' UNION SELECT class_dtl_cd, class_dtl_name FROM class_dtl_master--",
+]
+
+
+@pytest.mark.parametrize("payload", SEARCH_INJECTION_VALUES)
+def test_search_injection_values_safe(db_connection_with_tables, payload):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    screen = get_screen("car_list", con)
+    result = screen.search({"model": payload})
+    assert result == []
+    rows = con.execute("SELECT * FROM car ORDER BY car_id").fetchall()
+    assert len(rows) == 2
+
+
+SEARCH_INJECTION_KEYS = [
+    "`make`",
+    "`model`",
+    "make` = `model` --",
+    "make; DROP TABLE car;--",
+    "model' OR '1'='1",
+    "price) OR (1=1",
+    "' OR 1=1--",
+]
+
+
+@pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
+def test_search_injection_key_rejected(db_connection_with_tables, key):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    with pytest.raises(InvalidKeyException):
+        screen.make_condition({key: 1})
+    with pytest.raises(InvalidKeyException):
+        screen.search({key: 1})
+
+
+@pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
+def test_register_insert_injection_column_key_rejected(db_connection_with_tables, key):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    with pytest.raises(InvalidKeyException):
+        screen.run_insert("car", {key: 1})
+
+
+@pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
+def test_register_update_injection_column_key_rejected(db_connection_with_tables, key):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    with pytest.raises(InvalidKeyException):
+        screen.run_update("car", {key: 1}, {"car_id": 1})
+
+
+@pytest.mark.parametrize("screen_cd", [
+    "car_list'; DROP TABLE car;--",
+    "car_list' OR '1'='1 --",
+    "car_list UNION SELECT 1,2,3--",
+])
+def test_get_screen_injection_rejected(db_connection_with_tables, screen_cd):
+    con = db_connection_with_tables
+    with pytest.raises(InvalidScreenException):
+        get_screen(screen_cd, con)
+
+
+@pytest.mark.parametrize("payload", [
+    "' OR '1'='1",
+    "' UNION SELECT class_dtl_cd, class_dtl_name FROM class_dtl_master--",
+    "' AND 1=1--",
+    "testclass' --",
+])
+def test_getClass_injection_values_safe(db_connection_with_tables, payload):
+    con = db_connection_with_tables
+    insert(con, "class_master", {"class_cd": "testclass", "class_name": "テスト区分"})
+    assert getClass(con, payload) == []
+
+
+def test_search_union_injection_no_data_leak(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    screen = get_screen("car_list", con)
+    assert screen.search({"model": "' OR '1'='1"}) == []
+    assert screen.search({"model": "x' UNION SELECT make, model, price, electric FROM car--"}) == []
+
+
+def test_delete_injection_where_value_safe(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    screen = get_screen("car_list", con)
+    screen.run_delete("car", {"car_id": "1 OR 1=1; DROP TABLE car;--"})
+    rows = con.execute("SELECT * FROM car ORDER BY car_id").fetchall()
+    assert len(rows) == 2
+
+
+def test_register_update_injection_id_safe(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    screen = get_screen("car_list", con)
+    screen.update(Register(
+        insertList=[],
+        deleteList=[],
+        updateList=[{"id": "1 OR 1=1--", "price": 999}],
+    ))
+    prices = [r["price"] for r in con.execute("SELECT price FROM car ORDER BY car_id").fetchall()]
+    assert prices == [50000, 30000]
+
+
+def test_register_delete_injection_id_safe(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    screen = get_screen("car_list", con)
+    screen.update(Register(
+        insertList=[],
+        deleteList=["1 OR 1=1; DROP TABLE car;--"],
+        updateList=[],
+    ))
+    rows = con.execute("SELECT * FROM car ORDER BY car_id").fetchall()
+    assert len(rows) == 2
+
+
+def test_second_order_injection_safe(db_connection_with_tables):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    payload = "'; DROP TABLE car;--"
+    screen.run_insert("car", {"make": "Tesla", "model": payload, "price": 1, "electric": 0})
+    found = screen.search({"model": payload})
+    assert len(found) == 1
+    assert found[0]["model"] == payload
+    assert len(con.execute("SELECT * FROM car").fetchall()) == 1
+
+
+def test_sql_truncation_injection_stored_as_is(db_connection_with_tables):
+    con = db_connection_with_tables
+    screen = get_screen("car_list", con)
+    payload = "admin   '--"
+    screen.run_insert("car", {"make": "Tesla", "model": payload, "price": 1, "electric": 0})
+    assert screen.search({"model": "admin"}) == []
+    found = screen.search({"model": payload})
+    assert len(found) == 1
+
+
+def test_api_search_injection_safe(api_client):
+    api_client.post("/register?screenCd=car_list", json={
+        "insertList": [{"make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1}],
+        "deleteList": [],
+        "updateList": [],
+    })
+    for payload in ["' OR '1'='1", "' UNION SELECT 1,2,3,4--", "'; DROP TABLE car;--"]:
+        r = api_client.post("/search?screenCd=car_list", json={"params": {"model": payload}})
+        assert r.status_code == 200
+        assert r.json() == []
+
+
+def test_api_register_injection_value_safe(api_client):
+    payload = "'); DROP TABLE car; --"
+    r = api_client.post("/register?screenCd=car_list", json={
+        "insertList": [{"make": "Tesla", "model": payload, "price": 50000, "electric": 1}],
+        "deleteList": [],
+        "updateList": [],
+    })
+    assert r.status_code == 200
+    r = api_client.post("/search?screenCd=car_list", json={"params": {"model": payload}})
+    assert r.status_code == 200
+    assert len(r.json()) == 1
+    assert r.json()[0]["model"] == payload
+
+
+def test_api_search_injection_key_418(api_client):
+    for key in ["`model`", "model' OR '1'='1", "' OR 1=1--"]:
+        r = api_client.post("/search?screenCd=car_list", json={"params": {key: 1}})
+        assert r.status_code == 418
+        assert r.json() == {"message": f"invalid key: {key}"}
+
+
+def test_api_register_injection_key_418(api_client):
+    r = api_client.post("/register?screenCd=car_list", json={
+        "insertList": [{"make`=1, model='x' --": 1}],
+        "deleteList": [],
+        "updateList": [],
+    })
+    assert r.status_code == 418
+
+
+def test_api_injection_no_table_damage(api_client):
+    payloads = ["' OR '1'='1", "' UNION SELECT 1,2,3,4--", "'; DROP TABLE car;--"]
+    for payload in payloads:
+        api_client.post("/search?screenCd=car_list", json={"params": {"model": payload}})
+        api_client.post("/register?screenCd=car_list", json={
+            "insertList": [{"make": "Tesla", "model": payload, "price": 1, "electric": 0}],
+            "deleteList": [payload],
+            "updateList": [{"id": payload, "price": 1}],
+        })
+    r = api_client.post("/search?screenCd=car_list", json={"params": {}})
+    assert r.status_code == 200
+    r = api_client.get("/getColumns", params={"screenCd": "car_list"})
+    assert r.status_code == 200
+
+
+# -------------------------------------------------------------
+# 識別子（バッククォート）エスケープのテスト
+# -------------------------------------------------------------
+def test_quote_ident():
+    assert quote_ident("price") == "`price`"
+    assert quote_ident("make` FROM car --") == "`make`` FROM car --`"
+    assert quote_ident("a``b") == "`a````b`"
+
+
+def test_make_eq_condition_backtick_escaped():
+    cond, param = makeEqCondition("make` FROM car --", "x")
+    assert cond == "`make`` FROM car --` = ?"
+    assert param == "x"
+
+
+def test_select_table_name_injection_escaped(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    with pytest.raises(sqlite3.OperationalError):
+        select(con, "car WHERE make='Tesla'", ["make"], [])
+    rows = con.execute("SELECT * FROM car ORDER BY car_id").fetchall()
+    assert len(rows) == 2
+
+
+def test_select_order_by_injection_escaped(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    with pytest.raises(sqlite3.OperationalError):
+        select(con, "car", ["price DESC"], [])
+    with pytest.raises(sqlite3.OperationalError):
+        select(con, "car", ["price; DROP TABLE car;--"], [])
+
+
+def test_insert_column_name_injection_escaped(db_connection):
+    con = db_connection
+    data = {
+        "uk_text1`: 1, text2 = 'x' --": 1,
+        "uk_num1": 1,
+    }
+    with pytest.raises(sqlite3.OperationalError):
+        insert(con, "test", data)
+    result = con.execute("SELECT * FROM test").fetchall()
+    assert result == []
+    insert(con, "test", {"uk_num1": 1, "uk_text1": "a", "uk_bool1": 0, "text2": "ok"})
+    assert len(con.execute("SELECT * FROM test").fetchall()) == 1
+
+
+def test_update_set_column_injection_escaped(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    with pytest.raises(sqlite3.OperationalError):
+        update(con, "car", {"make = 'Hacked' WHERE 1=1 --": "x"}, {"car_id": 1})
+    rows = con.execute("SELECT make FROM car ORDER BY car_id").fetchall()
+    assert [r["make"] for r in rows] == ["Tesla", "Ford"]
+
+
+def test_update_where_column_injection_escaped(db_connection_with_tables):
+    con = db_connection_with_tables
+    _insert_cars(con)
+    with pytest.raises(sqlite3.OperationalError):
+        update(con, "car", {"price": 1}, {"car_id` = 1 --": 1})
+    rows = con.execute("SELECT price FROM car ORDER BY car_id").fetchall()
+    assert [r["price"] for r in rows] == [50000, 30000]
 
