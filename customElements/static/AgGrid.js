@@ -225,13 +225,9 @@ export class AgGridDiv extends HTMLDivElement {
   }
 
   getUpdateData() {
-    const insertList = []
-    const deleteList = []
-    const updateList = []
     const errorList = []
     this.#agGridApi.forEachNode((node) => {
       const data = node.data
-      console.log(data)
       if (data.__error) {
         for (const [k, v] of Object.entries(data.__error)) {
           if (v) {
@@ -240,6 +236,16 @@ export class AgGridDiv extends HTMLDivElement {
           }
         }
       }
+    })
+    if (errorList.length > 0) {
+      return { type: 'error', errorList }
+    }
+
+    const insertList = []
+    const deleteList = []
+    const updateList = []
+    this.#agGridApi.forEachNode((node) => {
+      const data = node.data
       if (data.__isDeleted) {
         deleteList.push(data.id)
       } else if (data.__isInserted) {
@@ -269,9 +275,6 @@ export class AgGridDiv extends HTMLDivElement {
         }
       }
     });
-    if (errorList.length > 0) {
-      return { type: 'error', errorList }
-    }
     if (insertList.length == 0 && deleteList.length == 0 && updateList.length == 0) {
       return { type: 'nothing' }
     }
