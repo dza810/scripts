@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from proj import setupSqlite
+from proj import setup_sqlite
 from proj.db import dict_factory, get_connection_sync, insert
 from proj.main import app, get_connection
 
@@ -31,7 +31,7 @@ def db_connection() -> Iterator[sqlite3.Connection]:
 def db_connection_with_tables(
     db_connection: sqlite3.Connection,
 ) -> sqlite3.Connection:
-    setupSqlite.setup(db_connection)
+    setup_sqlite.setup(db_connection)
     return db_connection
 
 
@@ -51,7 +51,7 @@ def api_client() -> Iterator[TestClient]:
     with sqlite3.connect(":memory:", check_same_thread=False) as con:
         con.row_factory = dict_factory
         con.autocommit = False
-        setupSqlite.setup(con)
+        setup_sqlite.setup(con)
 
         def override_get_connection() -> Iterator[sqlite3.Connection]:
             yield con
