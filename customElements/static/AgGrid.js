@@ -32,7 +32,7 @@ export class AgGridDiv extends HTMLDivElement {
     },
     cellClassRules: {
       'update-color': params => {
-        if (params.data.__isUpdated) {
+        if (!params.data.__isDeleted && params.data.__isUpdated) {
           const field = params.colDef.field;
           if (!field) {
             return false;
@@ -43,6 +43,9 @@ export class AgGridDiv extends HTMLDivElement {
           }
         }
         return false;
+      },
+      'delete-color': params => {
+        return params.data.__isDeleted;
       }
     },
     onCellValueChanged: (params) => {
@@ -81,11 +84,13 @@ export class AgGridDiv extends HTMLDivElement {
   async #setupAgGrid() {
     this.#agGridOptions = await this.#fetchOption();
     const { columnOptions, rowStyles } = this.#agGridOptions;
-    console.log(columnOptions)
     const gridOptions = {
       rowData: this.rowData,
       columnDefs: await this.#convertToAgGridColumnDefs(columnOptions),
       defaultColDef: this.#defaultColDef,
+      rowSelection: {
+        mode: 'multiRow',
+      },
       columnTypes: {
         "dropdown": {
           cellEditor: 'agSelectCellEditor',
@@ -152,6 +157,11 @@ export class AgGridDiv extends HTMLDivElement {
     addButton.addEventListener("click", () => this.addRow())
     this.append(addButton)
 
+    const deleteButton = document.createElement("button")
+    deleteButton.textContent = "削除"
+    deleteButton.addEventListener("click", () => this.deleteRow())
+    this.append(deleteButton)
+
     const agGridDiv = document.createElement("div")
     agGridDiv.style.height = "90%";
     this.append(agGridDiv)
@@ -162,6 +172,13 @@ export class AgGridDiv extends HTMLDivElement {
   addRow() {
     this.#agGridApi.applyTransaction({
       add: [{ __isInserted: true }]
+    });
+  }
+
+  deleteRow() {
+    const deletedItems = this.#agGridApi.getSelectedRows().map(d => { d.__isDeleted = !d.__isDeleted; return d })
+    this.#agGridApi.applyTransaction({
+      update: deletedItems
     });
   }
 
@@ -181,8 +198,16 @@ export class AgGridDiv extends HTMLDivElement {
     const updateList = []
     this.#agGridApi.forEachNode((node) => {
       const data = node.data
-      if (data.__isInserted) {
-        console.log('insert', data)
+      if (data.__isDeleted) {
+        const newData = {}
+        for (const [k, v] of Object.entries(data)) {
+          if (k.startsWith("__")) {
+            continue
+          }
+          newData[k] = v
+        }
+        deleteList.push(newData)
+      } else if (data.__isInserted) {
         const newData = {}
         for (const [k, v] of Object.entries(data)) {
           if (k.startsWith("__")) {
@@ -201,7 +226,6 @@ export class AgGridDiv extends HTMLDivElement {
           const beforeValue = beforeData?.[colKey]
           if (colValue != beforeValue) {
             updateData[colKey] = colValue
-            console.log(updateData)
           }
         }
         console.log(updateData)

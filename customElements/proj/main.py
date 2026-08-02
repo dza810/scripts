@@ -111,8 +111,8 @@ class ScreenCls(ABC):
         for ins_row in update.insertList:
             self.run_insert(table_name, ins_row)
 
-        for del_id in update.deleteList:
-            self.run_delete(table_name, {f"{table_name}_id": del_id})
+        for del_row in update.deleteList:
+            self.run_delete(table_name, {f"{table_name}_id": del_row["id"]})
 
         for upd_row in update.updateList:
             self.run_update(
