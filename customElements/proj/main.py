@@ -73,11 +73,20 @@ class InvalidKeyException(Exception):
 
 @app.exception_handler(InvalidKeyException)
 async def invalid_key_exception(
-    request: Request, exc: InvalidKeyException
+    request: Request, exc: InvalidKeyException 
 ) -> JSONResponse:
     return JSONResponse(
         status_code=418, content={"message": f"invalid key: {exc.name}"}
     )
+
+@app.exception_handler(ValueError)
+async def value_error(
+    request: Request, exc:  ValueError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=418, content={"message": f"invalid key: {",".join(exc.args)}"}
+    )
+
 
 
 @app.get("/")
@@ -146,8 +155,9 @@ class ScreenCls(ABC):
         self, table_name: str, data: dict[str, Any]
     ) -> sqlite3.Cursor | None:
         logger.debug("insert", table_name, data)
-        self._check_column_key(data.keys())
-        return insert(self.con, table_name, data)
+        self._check_required(data)
+        parsed_data = self.parse_data(data)
+        return insert(self.con, table_name, parsed_data)
 
     def run_update(
         self,
@@ -156,8 +166,8 @@ class ScreenCls(ABC):
         where: dict[str, Any],
     ) -> sqlite3.Cursor | None:
         logger.debug("update", table_name, data)
-        self._check_column_key(data.keys())
-        return update(self.con, table_name, data, where)
+        parsed_data = self.parse_data(data)
+        return update(self.con, table_name, parsed_data, where)
 
     def run_delete(
         self, table_name: str, where: dict[str, Any]
@@ -179,25 +189,56 @@ class ScreenCls(ABC):
                 {f"{table_name}_id": upd_row["id"]},
             )
 
-    def _check_column_key(self, keys: Iterable[str]) -> set[str]:
-        columns = {
-            v
-            for v in {col.get("column_name") for col in self.getColumnOptions()}
-            if v is not None
-        }
-        for key in keys:
-            if key not in columns:
+    def _check_required(self, data: dict[str, Any]):
+        columns = {col.get("column_name"): col for col in self.getColumnOptions()}
+        for column_name, option in columns.items():
+            if option.get("required") and column_name not in data:
+                raise ValueError(f"{column_name} is required")
+
+    def parse_data(self, data: dict[str, Any]) -> dict[str, Any]:
+        columns = {col.get("column_name"): col for col in self.getColumnOptions()}
+        parsed_data = {}
+        for key, value in data.items():
+            option = columns.get(key)
+            if option is None:
                 raise InvalidKeyException(key)
-        return columns
+            if option.get("required") and (value is None or len(str(value)) == 0):
+                raise ValueError(f"{key} is required")
+            if max_length:=option.get("max_length"):
+                if max_length < len(str(value)):
+                    raise ValueError(f"{key}={value} is longer than {max_length}")
+            if option["type"] == "number":
+                if not isinstance(value, int) and value is not None:
+                    raise ValueError(f"{key} must be a number")
+                parsed_data[key] = value
+            elif option["type"] == "text":
+                parsed_data[key] = str(value)
+            elif option["type"] == "checkbox":
+                if value is True or value == "true" or value == 1:
+                    parsed_data[key] = True
+                elif value is False or value == "false" or value == 0:
+                    parsed_data[key] = False
+                else:
+                    raise ValueError(key, value)
+            elif option["type"] == "dropdown":
+                parsed_data[key] = value
+
+        return parsed_data
 
     def getRowStyle(self) -> list[dict[str, Any]]:
         return getRowStyle(self.con, self.screen_cd)
 
+    _getColumnOptions = None
     def getColumnOptions(self) -> list[dict[str, Any]]:
-        return getColumnOptions(self.con, self.screen_cd)
+        if self._getColumnOptions is None:
+            self._getColumnOptions = getColumnOptions(self.con, self.screen_cd)
+        return self._getColumnOptions
 
+    _getSearchForm = None
     def getSearchForm(self) -> list[dict[str, Any]]:
-        return getSearchForm(self.con, self.screen_cd)
+        if self._getSearchForm is None:
+            self._getSearchForm = getSearchForm(self.con, self.screen_cd)
+        return self._getSearchForm
 
 
 class ScreenMaster(ScreenCls):

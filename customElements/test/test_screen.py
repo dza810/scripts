@@ -64,9 +64,9 @@ def test_screenCls_search_invalid_key(
         (
             "between",
             {"from": 10, "to": 20},
-            [("`price` >= ?", "10"), ("`price` <= ?", "20")],
+            [("? <= `price`", "10"), ("`price` <= ?", "20")],
         ),
-        ("between", {"from": 10}, [("`price` >= ?", "10")]),
+        ("between", {"from": 10}, [("? <= `price`", "10")]),
         ("between", {"to": 20}, [("`price` <= ?", "20")]),
         ("between", {}, []),
         (

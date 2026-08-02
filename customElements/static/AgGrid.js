@@ -16,7 +16,7 @@ export class AgGridDiv extends HTMLDivElement {
 
   #defaultColDef = {
     filter: true,
-    editable: true,
+    editable: (params) => params.data.__isInserted || !!params.colDef.isEditable,
     cellStyle: params => {
       if (params.value === undefined) {
         return;
@@ -53,7 +53,7 @@ export class AgGridDiv extends HTMLDivElement {
         return params.data?.__error?.[params.colDef.field]
       },
       'uneditable-color': params => {
-        return !params.colDef.editable;
+        return !params.colDef.editable(params);
       }
     },
     onCellValueChanged: (params) => {
@@ -71,7 +71,7 @@ export class AgGridDiv extends HTMLDivElement {
       const value = params.newValue;
       if (params.colDef.required && (value == null || value.toString().length == 0)) {
         this.#setError(params);
-      } else if (params.colDef.maxLength != null && value.toString().length > params.colDef.maxLength) {
+      } else if (params.colDef.max_length != null && value.toString().length > params.colDef.max_length) {
         this.#setError(params);
       }
       return true;
@@ -146,9 +146,10 @@ export class AgGridDiv extends HTMLDivElement {
     const columnDefs = []
     for (const colOpt of columnOptions) {
       const colDef = { ...colOpt }
+      delete colDef.editable
       colDef.headerName = colOpt.column_name
       colDef.field = colOpt.column_cd
-      colDef.editable = !!colOpt.editable
+      colDef.isEditable = colOpt.editable
       columnDefs.push(colDef);
     }
     return columnDefs;
