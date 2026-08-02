@@ -188,7 +188,6 @@ export class AgGridDiv extends HTMLDivElement {
     for (const d of originalData) {
       this.#originalData.set(d.id, d);
     }
-    console.log(this.#originalData);
     this.#agGridApi.setGridOption('rowData', rowData);
   }
 
@@ -228,7 +227,6 @@ export class AgGridDiv extends HTMLDivElement {
             updateData[colKey] = colValue
           }
         }
-        console.log(updateData)
         if (Object.keys(updateData).length > 0) {
           updateData.id = data.id;
           updateList.push(updateData)

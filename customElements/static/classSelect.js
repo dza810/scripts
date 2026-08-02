@@ -28,7 +28,6 @@ export class ClassSelect extends HTMLSelectElement {
 
   async #loadOptions() {
     const code = this.code;
-    console.log('#loadOptions', code);
     if (!this.#isConnected) {
       return;
     }
@@ -38,7 +37,6 @@ export class ClassSelect extends HTMLSelectElement {
 
     this.innerHTML = "";
     if (!this.code) {
-      console.log('#loadOptions stop:', code)
       return;
     }
 
@@ -75,7 +73,6 @@ export class ClassSelect extends HTMLSelectElement {
   }
 
   attributeChangedCallback(name, oldValue, newValue) {
-    console.log('attributeChangedCallback', name, oldValue, newValue);
     switch (name) {
       case "code":
       case "required":

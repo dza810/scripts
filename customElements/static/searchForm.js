@@ -129,7 +129,6 @@ registerSearchFormInput(
 
 const searchFormInputFactory = (option) => {
   const clazz = searchFormInputClasses.get(option.type)
-  console.log(option, clazz)
   return new clazz(option);
 }
 

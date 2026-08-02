@@ -5,14 +5,11 @@ export class ErrorBanner extends HTMLDivElement {
 
   connectedCallback() {
     this.textContent = "no error"
-    console.log(this)
     window.addEventListener('error', (event) => {
       this.textContent = `error: ${event?.message}`
-      console.log(`error: ${event.message}`, event)
     })
     window.addEventListener('unhandledrejection', (event) => {
       this.textContent = `error(promise): ${event?.reason}`
-      console.log(`error(promise): ${event.reason}`, event)
     });
   }
 }

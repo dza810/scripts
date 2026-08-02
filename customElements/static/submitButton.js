@@ -28,7 +28,6 @@ class SubmitButton extends HTMLButtonElement {
   }
 
   getAgGridElement() {
-    console.log(this.agGrid);
     return document.querySelector(this.agGrid)
   }
 
@@ -42,7 +41,6 @@ class SubmitButton extends HTMLButtonElement {
 
   #setup() {
     this.addEventListener("click", async () => {
-      console.log("click")
       const updateData = this.getAgGridElement().getUpdateData()
       await runFetch(this.api, {
         method: "POST",

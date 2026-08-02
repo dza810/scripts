@@ -45,12 +45,10 @@ export class FetchButton extends HTMLButtonElement {
   }
 
   #preProcess(event) {
-    console.log("preProcess")
     this.disabled = true;
     setupLoadingDialog().showModal();
   }
   #postProcess(event) {
-    console.log("postProcess")
     this.disabled = false;
     setupLoadingDialog().close();
     try {
