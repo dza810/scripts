@@ -34,7 +34,7 @@ export async function runFetch(url, options) {
     body
   }).then(async r => {
     if (!r.ok) {
-      throw new Error(await r.json())
+      throw new Error(await r.text())
     }
     return r
   }).then(r => r.json())

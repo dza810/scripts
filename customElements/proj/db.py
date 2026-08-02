@@ -153,7 +153,7 @@ def makeConditionQuery(
             value_from = value.get("from")
             if value_from:
                 queries.append(
-                    (f"{quote_ident(column)} >= ?", handleSqlValue(value_from))
+                    (f"? <= {quote_ident(column)}", handleSqlValue(value_from))
                 )
             value_to = value.get("to")
             if value_to:

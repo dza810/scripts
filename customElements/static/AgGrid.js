@@ -247,7 +247,9 @@ export class AgGridDiv extends HTMLDivElement {
     this.#agGridApi.forEachNode((node) => {
       const data = node.data
       if (data.__isDeleted) {
-        deleteList.push(data.id)
+        if (data.id !== undefined) {
+          deleteList.push(data.id)
+        }
       } else if (data.__isInserted) {
         const newData = {}
         for (const [k, v] of Object.entries(data)) {

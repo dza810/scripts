@@ -1,1 +1,7 @@
 fastapi[standard]
+loguru
+pytest
+httpx2
+pytest-asyncio
+pyright
+ruff
