@@ -23,7 +23,9 @@ class Column:
     in_uniq: bool
     not_null: bool
     default: Any
+    editable: bool
     dropdown_class_cd: str | None
+    max_length: int | None
 
 
 def column(
@@ -35,6 +37,8 @@ def column(
     not_null: bool = False,
     default: Any = None,
     dropdown_class_cd: str | None = None,
+    max_length: int | None = None,
+    editable: bool = True
 ) -> Column:
     col = Column()
     col.code = code
@@ -57,6 +61,8 @@ def column(
     col.not_null = not_null
     col.default = default
     col.dropdown_class_cd = dropdown_class_cd
+    col.max_length = max_length
+    col.editable = editable
     return col
 
 
@@ -75,7 +81,7 @@ def table(name: str, cols: list[Column]) -> Table:
 screen_table = table(
     "screen",
     [
-        column("screen_cd", "text", in_uniq=True, not_null=True),
+        column("screen_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("screen_name", "text", not_null=True),
     ],
 )
@@ -83,14 +89,16 @@ screen_table = table(
 column_table = table(
     "column",
     [
-        column("screen_id", "text", in_uniq=True, not_null=True),
-        column("column_cd", "text", in_uniq=True, not_null=True),
+        column("screen_id", "text", in_uniq=True, not_null=True, editable=False),
+        column("column_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("column_name", "text", not_null=True),
         column("type", "text", not_null=True),
         column("view_order", "number", not_null=True),
         column("required", "checkbox", not_null=True, default=0),
+        column("editable", "checkbox", not_null=True, default=1),
         column("cell_style_code_condition", "text"),
         column("cell_style_code_style", "text"),
+        column("max_length", "number"),
         # dropdown
         column("dropdown_class_cd", "text"),
         # auto_calc
@@ -101,7 +109,7 @@ column_table = table(
 search_form_condition_table = table(
     "search_form_condition",
     [
-        column("condition_cd", "text", in_uniq=True, not_null=True),
+        column("condition_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("condition_name", "text", not_null=True),
     ],
 )
@@ -134,7 +142,7 @@ row_style_table = table(
 class_table = table(
     "class_master",
     [
-        column("class_cd", "text", in_uniq=True, not_null=True),
+        column("class_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("class_name", "text", not_null=True),
     ],
 )
@@ -142,8 +150,8 @@ class_table = table(
 class_dtl_table = table(
     "class_dtl_master",
     [
-        column("class_id", "number", in_uniq=True, not_null=True),
-        column("class_dtl_cd", "text", in_uniq=True, not_null=True),
+        column("class_id", "number", in_uniq=True, not_null=True, editable=False),
+        column("class_dtl_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("class_dtl_name", "text", not_null=True),
         column("is_default", "checkbox", not_null=True, default=0),
         column("view_order", "number"),
@@ -240,6 +248,9 @@ def setup_table_util(
                 "column_name": col.code,
                 "type": col.type_,
                 "dropdown_class_cd": col.dropdown_class_cd,
+                "max_length": col.max_length,
+                "required": col.not_null,
+                "editable": col.editable,
             },
         ).lastrowid
 

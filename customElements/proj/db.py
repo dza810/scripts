@@ -222,9 +222,10 @@ def getSearchForm(
             column.column_cd,
             column.column_name,
             column.type,
+            search_form.required,
             column.dropdown_class_cd,
-            search_form.view_order,
-            search_form_condition.condition_cd
+            search_form_condition.condition_cd,
+            search_form.view_order
         FROM search_form
         JOIN search_form_condition ON search_form.condition_id = search_form_condition.search_form_condition_id
         JOIN column ON search_form.column_id = column.column_id

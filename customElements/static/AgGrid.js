@@ -48,6 +48,12 @@ export class AgGridDiv extends HTMLDivElement {
       },
       'delete-color': params => {
         return params.data.__isDeleted;
+      },
+      'error-color': params => {
+        return params.data?.__error?.[params.colDef.field]
+      },
+      'uneditable-color': params => {
+        return !params.colDef.editable;
       }
     },
     onCellValueChanged: (params) => {
@@ -58,6 +64,70 @@ export class AgGridDiv extends HTMLDivElement {
         });
         params.api.redrawRows({ rowNodes: [params.node] });
       }
+    },
+    valueSetter: (params) => {
+      this.#clearError(params);
+      params.data[params.colDef.field] = params.newValue;
+      const value = params.newValue;
+      if (params.colDef.required && (value == null || value.toString().length == 0)) {
+        this.#setError(params);
+      } else if (params.colDef.maxLength != null && value.toString().length > params.colDef.maxLength) {
+        this.#setError(params);
+      }
+      return true;
+    }
+  }
+
+  #clearError(params) {
+    params.data.__error = params.data?.__error ?? {}
+    params.data.__error[params.colDef.field] = false;
+  }
+
+  #setError(params) {
+    params.data.__error = params.data?.__error ?? {}
+    params.data.__error[params.colDef.field] = true;
+  }
+
+  #columnTypes = {
+    "dropdown": {
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: (params) => {
+        return {
+          values: params.colDef?.classes?.map(v => v.value) ?? []
+        }
+      },
+      valueFormatter: (params) => {
+        return params.colDef?.classes?.find(v => params.value == v.value)?.name;
+      },
+      valueParser: (params) => {
+        return params.colDef?.classes?.find(v => params.newValue == v.name)?.value;
+      }
+    },
+    "autoCalc": {
+      editable: false,
+      valueFormatter: (params) => {
+        const code = params.colDef.code ?? "";
+        return this.#safeEval(params, code);
+      },
+    },
+    "text": {
+      cellDataType: "text",
+      cellEditor: "agTextCellEditor"
+    },
+    "number": {
+      cellDataType: "number",
+      cellEditor: "agNumberCellEditor",
+      filter: 'agNumberColumnFilter',
+    },
+    "checkbox": {
+      cellDataType: "boolean",
+      cellRenderer: 'agCheckboxCellRenderer',
+      valueGetter: (params) => {
+        return params.data[params.colDef.field] == 1
+      }
+    },
+    "date": {
+      cellDataType: "date"
     }
   }
 
@@ -78,6 +148,7 @@ export class AgGridDiv extends HTMLDivElement {
       const colDef = { ...colOpt }
       colDef.headerName = colOpt.column_name
       colDef.field = colOpt.column_cd
+      colDef.editable = !!colOpt.editable
       columnDefs.push(colDef);
     }
     return columnDefs;
@@ -93,48 +164,7 @@ export class AgGridDiv extends HTMLDivElement {
       rowSelection: {
         mode: 'multiRow',
       },
-      columnTypes: {
-        "dropdown": {
-          cellEditor: 'agSelectCellEditor',
-          cellEditorParams: (params) => {
-            return {
-              values: params.colDef?.classes?.map(v => v.value) ?? []
-            }
-          },
-          valueFormatter: (params) => {
-            return params.colDef?.classes?.find(v => params.value == v.value)?.name;
-          },
-          valueParser: (params) => {
-            return params.colDef?.classes?.find(v => params.newValue == v.name)?.value;
-          }
-        },
-        "autoCalc": {
-          editable: false,
-          valueFormatter: (params) => {
-            const code = params.colDef.code ?? "";
-            return this.#safeEval(params, code);
-          },
-        },
-        "text": {
-          cellDataType: "text",
-          cellEditor: "agTextCellEditor"
-        },
-        "number": {
-          cellDataType: "number",
-          cellEditor: "agNumberCellEditor",
-          filter: 'agNumberColumnFilter',
-        },
-        "checkbox": {
-          cellDataType: "boolean",
-          cellRenderer: 'agCheckboxCellRenderer',
-          valueGetter: (params) => {
-            return params.data[params.colDef.field] == 1
-          }
-        },
-        "date": {
-          cellDataType: "date"
-        }
-      },
+      columnTypes: this.#columnTypes,
       getRowStyle: params => {
         const style = {}
         for (const rowStyle of (rowStyles ?? [])) {
@@ -191,23 +221,27 @@ export class AgGridDiv extends HTMLDivElement {
       this.#originalData.set(d.id, d);
     }
     this.#agGridApi.setGridOption('rowData', rowData);
+    this.#agGridApi.sizeColumnsToFit()
   }
 
   getUpdateData() {
     const insertList = []
     const deleteList = []
     const updateList = []
+    const errorList = []
     this.#agGridApi.forEachNode((node) => {
       const data = node.data
-      if (data.__isDeleted) {
-        const newData = {}
-        for (const [k, v] of Object.entries(data)) {
-          if (k.startsWith("__")) {
+      console.log(data)
+      if (data.__error) {
+        for (const [k, v] of Object.entries(data.__error)) {
+          if (v) {
+            errorList.push([data.id, k])
             continue
           }
-          newData[k] = v
         }
-        deleteList.push(newData)
+      }
+      if (data.__isDeleted) {
+        deleteList.push(data.id)
       } else if (data.__isInserted) {
         const newData = {}
         for (const [k, v] of Object.entries(data)) {
@@ -235,7 +269,14 @@ export class AgGridDiv extends HTMLDivElement {
         }
       }
     });
-    return { insertList, deleteList, updateList }
+    if (errorList.length > 0) {
+      return { type: 'error', errorList }
+    }
+    if (insertList.length == 0 && deleteList.length == 0 && updateList.length == 0) {
+      return { type: 'nothing' }
+    }
+    return { type: 'ok', insertList, deleteList, updateList }
+
   }
 }
 

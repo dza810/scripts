@@ -2,8 +2,10 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Annotated, Any
+import secrets
+import hmac
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response, Header, Cookie
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -26,6 +28,32 @@ DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+class CsrfException(Exception):
+    ...
+
+
+@app.get("/getCsrfToken")
+async def get_csrf_token(response: Response):
+    token = secrets.token_urlsafe(32)
+    response.delete_cookie(key="csrftoken")
+    response.set_cookie(key="csrftoken", value=token, samesite="lax")
+    return {'type': 'ok'}
+
+async def check_csrf_token(
+        token_header: Annotated[str | None, Header(alias="csrftoken")],
+        token_cookie: Annotated[str | None, Cookie(alias="csrftoken")]
+    ):
+    print(token_header)
+    if token_header is None or token_cookie is None:
+        raise CsrfException(f'{token_header} <> {token_cookie}')
+
+    if not hmac.compare_digest(token_header.encode(), token_cookie.encode()):
+        raise CsrfException(f'{repr(token_header)} <> {str(token_cookie)}')
+    return
+
+CheckCsrfToken = Annotated[None, Depends(check_csrf_token)]
+
 
 class Register(BaseModel):
     updateList: list[dict[str, Any]]
@@ -64,9 +92,36 @@ class ScreenCls(ABC):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]: ...
 
     def make_condition(self, params: dict[str, Any]) -> list[tuple[str, Any]]:
-        options = {v["search_form_cd"]: v for v in self.getSearchForm()}
+        options = { v["search_form_cd"]: v for v in self.getSearchForm() }
         queries = []
-        for key, value in params.items():
+        new_params = {}
+        for key in params:
+            if "::" in key:
+                keys = key.split("::")
+                new_params[keys[0]]  = new_params.get(keys[0], {})
+                valueTmp = new_params[keys[0]] 
+                for k in keys[1:-1]:
+                    valueTmp[k] = valueTmp.get(k, {})
+                    valueTmp = valueTmp[k]
+                valueTmp[keys[-1]] = params[key]
+            else:
+                new_params[key] = params[key]
+
+        del params
+
+        for key in new_params:
+            option = options.get(key)
+            if option is None:
+                raise InvalidKeyException(key)
+            if option["type"] == "checkbox":
+                if new_params[key] == "false":
+                    new_params[key] = False
+                elif new_params[key] == "true":
+                    new_params[key] = True
+                else:
+                    raise Exception("invalid value")
+
+        for key, value in new_params.items():
             option = options.get(key)
             if option is None:
                 raise InvalidKeyException(key)
@@ -111,8 +166,8 @@ class ScreenCls(ABC):
         for ins_row in update.insertList:
             self.run_insert(table_name, ins_row)
 
-        for del_row in update.deleteList:
-            self.run_delete(table_name, {f"{table_name}_id": del_row["id"]})
+        for del_id in update.deleteList:
+            self.run_delete(table_name, {f"{table_name}_id": del_id})
 
         for upd_row in update.updateList:
             self.run_update(
@@ -225,13 +280,17 @@ Screen = Annotated[ScreenCls, Depends(get_screen)]
 
 
 @app.post("/search")
-async def search(screen: Screen, params: dict[str, Any]) -> list[dict[str, Any]]:
+async def search(
+        screen: Screen,
+        params: dict[str, Any],
+        _:CheckCsrfToken
+) -> list[dict[str, Any]]:
     return screen.search(params["params"])
 
 
 @app.post("/register")
 async def register(
-    dbConnection: DbConnection, screen: Screen, update: Register
+        dbConnection: DbConnection, screen: Screen, update: Register, _:CheckCsrfToken
 ) -> None:
     screen.update(update)
 

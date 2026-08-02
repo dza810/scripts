@@ -44,12 +44,19 @@ class SubmitButton extends FetchButton {
 
   #setup() {
     this.addEventListener("click", async () => {
-      const updateData = this.getAgGridElement().getUpdateData()
-      await runFetch(this.api, {
-        method: "POST",
-        body: updateData
-      })
-      this.getSearchFormElement().search()
+      const data = this.getAgGridElement().getUpdateData()
+      if (data.type == 'error') {
+        throw new Error(JSON.stringify(data.errorList));
+      } else if (data.type == 'ok') {
+        delete data.type
+        await runFetch(this.api, {
+          method: "POST",
+          body: data
+        })
+        await this.getSearchFormElement().search()
+      } else if (data.type == 'nothing') {
+        console.log(data)
+      }
     })
   }
 }

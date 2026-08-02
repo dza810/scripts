@@ -27,13 +27,14 @@ export async function runFetch(url, options) {
   urlObj.searchParams.append('screenCd', window.screenCd)
   const method = options?.method ?? "GET";
   const body = method == "GET" ? undefined : JSON.stringify({ ...options?.body })
+  const csrftoken = await cookieStore.get("csrftoken").then(v => v?.value)
   return await fetch(urlObj, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { "Content-Type": "application/json", "csrftoken": csrftoken, ...options?.headers },
     body
-  }).then(r => {
+  }).then(async r => {
     if (!r.ok) {
-      throw new Error(r.body)
+      throw new Error(await r.json())
     }
     return r
   }).then(r => r.json())
@@ -43,3 +44,4 @@ export async function runFetch(url, options) {
 const url = new URL(document.location.href)
 window.screenCd = url.searchParams.get("screenCd")
 
+fetch('/getCsrfToken')

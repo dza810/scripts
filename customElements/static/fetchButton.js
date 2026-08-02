@@ -30,7 +30,7 @@ export class FetchButton extends HTMLButtonElement {
     this.#origOnclick = fn;
     try {
       super.onclick = typeof fn === 'function' ? this.#makeWrapped(fn) : null;
-    } catch(e) {
+    } catch (e) {
       console.error(e);
     }
   }
@@ -46,16 +46,18 @@ export class FetchButton extends HTMLButtonElement {
     };
   }
 
+  #timer;
   #preProcess(event) {
     this.disabled = true;
-    setupLoadingDialog().showModal();
+    this.#timer = setTimeout(() => setupLoadingDialog().showModal(), 500);
   }
   #postProcess(event) {
+    clearTimeout(this.#timer);
     this.disabled = false;
     setupLoadingDialog().close();
     try {
       document.querySelector("#loadingDialog")?.close();
-    } catch(e) {
+    } catch (e) {
       console.error(e);
     }
   }

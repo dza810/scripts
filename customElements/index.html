@@ -20,6 +20,22 @@
 .delete-color {
   background: lightgray;
 }
+.error-color {
+  background: pink;
+}
+.uneditable-color {
+  color: darkgray;
+}
+form *:required {
+  background: lightblue;
+}
+form *:invalid:required {
+  background: lightblue;
+  border-color: red;
+}
+form *:invalid {
+  background: pink;
+}
     </style>
     <div is="error-banner"></div>
     <form is="search-form" agGrid="#myGrid" id="searchForm"></form>

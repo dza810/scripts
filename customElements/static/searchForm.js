@@ -186,33 +186,15 @@ export class SearchForm extends HTMLFormElement {
   }
 
   async search() {
+    if (!this.checkValidity()) {
+      this.reportValidity()
+      return false;
+    }
     const formData = new FormData(this, this.querySelector("#searchButton"));
     const params = {}
-    const options = await this.#fetchOption()
     for (const [key, data] of formData) {
       if (data != "") {
-        const opt = options.find(o => o.column_cd === key) ?? {};
-        switch (opt?.type) {
-          case "checkbox":
-            if (data == "true") {
-              params[key] = true;
-            } else if (data == "false") {
-              params[key] = false;
-            }
-            break
-          default:
-            params[key] = data
-        }
-        const keySplitted = key.split("::")
-        if (keySplitted.length >= 2) {
-          let paramsTmp = params;
-          for (const keyPart of keySplitted.slice(0, -1)) {
-            paramsTmp[keyPart] = paramsTmp[keyPart] ?? {}
-            paramsTmp = paramsTmp[keyPart]
-          }
-          paramsTmp[keySplitted.at(-1)] = data
-          delete params[key]
-        }
+        params[key] = data
       }
     }
     await this.#search(params).then(result => {
