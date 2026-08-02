@@ -14,12 +14,23 @@ def dict_factory(cursor, row):
     return {key: value for key, value in zip(fields, row)}
 
 
-async def get_connection():
-    with sqlite3.connect("data.db") as con:
+"""
+async なしの場合 fastapi が別スレッドで動かしてしまう。
+=> handler メソッドで async にできるようにここにもつける
+"""
+async def get_connection(dbname="data.db"):
+    print(dbname)
+    with sqlite3.connect(dbname) as con:
         con.row_factory = dict_factory
         con.autocommit = False
         yield con
 
+def get_connection_sync(dbname="data.db"):
+    print(dbname)
+    with sqlite3.connect(dbname) as con:
+        con.row_factory = dict_factory
+        con.autocommit = False
+        yield con
 
 DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
@@ -65,22 +76,21 @@ def makeEqCondition(k, v) -> tuple[str, Any]:
     else:
         return f"`{k}` = ?", handleSqlValue(v)
 
-
-def insert(con, table_name, data: dict):
+def insert(con, table_name, data: dict) -> sqlite3.Cursor | None:
     if len(data) == 0:
         return None
     sql = f"""
-    INSERT INTO {table_name} (
-      {",\n  ".join(f"`{k}`" for k in data)}
-    ) VALUES (
-      {",\n  ".join(f":{k}" for k in data)}
-    )
-    """
+        INSERT INTO {table_name} (
+          {",\n  ".join(f"`{k}`" for k in data)}
+        ) VALUES (
+          {",\n  ".join(f":{k}" for k in data)}
+        )
+        """
     logger.debug(sql)
     return con.execute(sql, {k: handleSqlValue(v) for k, v in data.items()})
 
 
-def update(con, table_name, data: dict, where: dict):
+def update(con, table_name, data: dict, where: dict) -> sqlite3.Cursor | None:
     if len(data) == 0:
         return None
     conditions = [makeEqCondition(k, v) for k, v in where.items()]
@@ -96,7 +106,7 @@ def update(con, table_name, data: dict, where: dict):
     return con.execute(sql, params)
 
 
-def _getClass(con, class_cd):
+def getClass(con, class_cd) -> list[dict[str, Any]]:
     sql = """
       SELECT
         class_dtl_cd as value,
@@ -122,37 +132,38 @@ class ScreenCls(ABC):
     @abstractmethod
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]: ...
 
+    def make_condition_query(self, option, key, value):
+        column_cd = option.get("column_cd")
+        queries = []
+        match option["condition_cd"]:
+            case "equal":
+                queries.append(makeEqCondition(column_cd, value))
+            case "lesser_than_or_equal":
+                queries.append((f"`{column_cd}` <= ?", handleSqlValue(value)))
+            case "greater_than_or_equal":
+                queries.append((f"? <= `{column_cd}`", handleSqlValue(value)))
+            case "between":
+                value_from = value.get("from")
+                if value_from:
+                    queries.append((f"`{column_cd}` >= ?", handleSqlValue(value_from)))
+                value_to = value.get("to")
+                if value_to:
+                    queries.append((f"`{column_cd}` <= ?", handleSqlValue(value_to)))
+            case "contains":
+                for word in value.split(" "):
+                    queries.append((f"`{column_cd}` like ('%' || ? || '%')", handleSqlValue(word)))
+            case _:
+                print('skip', option)
+        return queries
+
     def make_condition(self, params) -> list[tuple[str, Any]]:
         options = {v["search_form_cd"]: v for v in self.getSearchForm()}
         queries = []
         for key, value in params.items():
             option = options.get(key)
-            assert option is not None
-            query: tuple[str, Any] | None = None
-            column_cd = option.get("column_cd")
-            if column_cd is None:
-                continue
-            match option["condition_cd"]:
-                case "equal":
-                    queries.append(makeEqCondition(column_cd, value))
-                case "lesser_than_or_equal":
-                    queries.append((f"`{column_cd}` <= ?", handleSqlValue(value)))
-                case "greater_than_or_equal":
-                    queries.append((f"? <= `{column_cd}`", handleSqlValue(value)))
-                case "between":
-                    value_from = value.get("from")
-                    if value_from:
-                        queries.append((f"`{column_cd}` >= ?", handleSqlValue(value_from)))
-                    value_to = value.get("to")
-                    if value_to:
-                        queries.append((f"`{column_cd}` <= ?", handleSqlValue(value_to)))
-                case "contains":
-                    for word in value.split(" "):
-                        queries.append((f"`{column_cd}` like ('%' || ? || '%')", handleSqlValue(word)))
-                case _:
-                    print('skip', option)
-            if query is not None:
-                queries.append(query)
+            if option is None:
+                raise InvalidKeyException(key)
+            queries.extend(self.make_condition_query(option, key, value))
         return queries
 
     def run_search(self, table_name: str, order_by: list[str], params: dict[str, Any]):
@@ -349,8 +360,8 @@ async def register(screen: Screen, update: Register):
 
 
 @app.get("/getClass")
-async def getClass(code: str, dbConnection: DbConnection):
-    return _getClass(dbConnection, code)
+async def _getClass(code: str, dbConnection: DbConnection):
+    return getClass(dbConnection, code)
 
 
 @app.get("/getColumns")
@@ -359,7 +370,7 @@ async def getColumns(screen: Screen, dbConnection: DbConnection):
     for col in columnOptions:
         if col["type"] == "dropdown":
             print("_getClass")
-            col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
+            col["classes"] = getClass(dbConnection, col["dropdown_class_cd"])
 
     rowStyles = screen.getRowStyle()
     return {"columnOptions": columnOptions, "rowStyles": rowStyles}

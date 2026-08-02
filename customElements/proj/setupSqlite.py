@@ -8,8 +8,8 @@ def dict_factory(cursor, row):
     return {key: value for key, value in zip(fields, row)}
 
 
-def connect():
-    con = sqlite3.connect("data.db")
+def connect(dbname: str):
+    con = sqlite3.connect(dbname)
     con.row_factory = dict_factory
     con.autocommit = False
     return con
@@ -196,14 +196,18 @@ def create_table_sql(table):
     return sql
 
 
-def insert(con, table_name, data: dict):
-    sql = f"""
+def _make_insert_statement(con, table_name, data):
+    return f"""
     INSERT INTO {table_name} (
       {",\n  ".join(k for k in data)}
     ) VALUES (
       {",\n  ".join(f":{k}" for k in data)}
     )
     """
+
+
+def insert(con, table_name, data: dict):
+    sql = _make_insert_statement(con, table_name, data)
     print(sql)
     return con.execute(sql, data)
 
@@ -312,21 +316,17 @@ def setup_search_form_condition(con):
     insert(con, table.name, {"condition_cd": "between", "condition_name": "間"})
 
 
-# with connect() as con:
-#     setup_screen_column(con)
-#     setup_search_form_condition(con)
-#     setup_row_style(con)
-#     make_table(con, car_table, "car_list", "カーリスト")
-#     setup_class_tables(con)
 
-with connect() as con:
-    # sql = """
-    # insert into search_form_condition (condition_cd, condition_name)values ('contains', '含む(スペース区切りで分割)')
-    # """
-    sql = """
-    select * from search_form_condition 
-    """
-    print(sql)
-    print("---")
-    pp = pprint.PrettyPrinter(indent=4)
-    pp.pprint(con.execute(sql).fetchall())
+def setup(con: sqlite3.Connection):
+    setup_screen_column(con)
+    setup_search_form_condition(con)
+    setup_row_style(con)
+    make_table(con, car_table, "car_list", "カーリスト")
+    setup_class_tables(con)
+
+if __name__ == "__main__":
+    import sys
+    dbname = sys.argv[1]
+    assert dbname, "dbname を指定してください"
+    with connect(dbname) as con:
+        setup(con)
