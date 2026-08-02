@@ -23,7 +23,7 @@ class SearchFormInput {
   }
 
   getViewName() {
-    return this.option.viewName ?? this.getName()
+    return this.option.search_form_name ?? this.getName()
   }
 
   makeLabel() {
