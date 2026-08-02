@@ -1,5 +1,45 @@
+const searchFormImputFactory = {
+  "dropdown": (option) => {
+    const elm = document.createElement("select", { is: "class-select" });
+    elm.code = option.column_cd
+    return elm;
+  },
+  "text": () => {
+    const elm = document.createElement("input");
+    return elm;
+  },
+  "number": () => {
+    const elm = document.createElement("input");
+    elm.type = "number";
+    return elm;
+  },
+  "checkbox": (option) => {
+    const elm = document.createElement("select");
+    let opt
+    if (!option.required) {
+      opt = document.createElement("option");
+      elm.append(opt);
+    }
+    opt = document.createElement("option");
+    opt.textContent = "true のみ";
+    opt.value = "true";
+    elm.append(opt);
+    opt = document.createElement("option");
+    opt.textContent = "false のみ";
+    opt.value = "false";
+    elm.append(opt);
+    return elm;
+  },
+  "date": () => {
+    const elm = document.createElement("input");
+    elm.type = "date";
+    return elm;
+  }
+}
+
+
 export class SearchForm extends HTMLFormElement {
-  #columnOptions = undefined
+  #searchFormOptions = undefined
   connectedCallback() {
     this.#setupSearchForm()
   }
@@ -17,64 +57,27 @@ export class SearchForm extends HTMLFormElement {
   }
 
   async #fetchOption() {
-    if (!this.#columnOptions) {
-      this.#columnOptions = await fetch(`/getColumns?screenCd=${window.screenCd}`, { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
+    if (!this.#searchFormOptions) {
+      this.#searchFormOptions = await fetch(`/getSearchForms?screenCd=${window.screenCd}`, { headers: { 'Content-Type': 'application/json' } }).then(r => r.json());
     }
-    return this.#columnOptions.columnOptions;
+    return this.#searchFormOptions
   }
 
   async #setupSearchForm() {
     const options = await this.#fetchOption();
     const customElements = Array.from(this.children)
-    let index = -1;
     for (const option of options) {
-      index++;
-      let elm;
-      switch (option.type) {
-        case "dropdown":
-          elm = document.createElement("select", { is: "class-select" });
-          elm.code = option.column_cd
-          break;
-        case "text":
-          elm = document.createElement("input");
-          break;
-        case "number":
-          elm = document.createElement("input");
-          elm.type = "number";
-          break;
-        case "checkbox":
-          elm = document.createElement("select");
-          let opt
-          if (!option.required) {
-            opt = document.createElement("option");
-            elm.append(opt);
-          }
-          opt = document.createElement("option");
-          opt.textContent = "true のみ";
-          opt.value = "true";
-          elm.append(opt);
-          opt = document.createElement("option");
-          opt.textContent = "false のみ";
-          opt.value = "false";
-          elm.append(opt);
-          break;
-        case "date":
-          elm = document.createElement("input");
-          elm.type = "date";
-          break;
-        case "autoCalc":
-          /* 自動計算は飛ばす */
-          break;
-        default:
-          console.warn(option);
+      let factory = searchFormImputFactory?.[option.type];
+      if (!factory) {
+        console.warn('invalid option', option);
+        continue
       }
-
+      const elm = factory(option)
       if (elm) {
         const div = document.createElement("div");
-        elm.name = option.column_name ?? `index-${index}`
-        elm.required = !!(option.required ?? false);
+        elm.name = option.search_form_cd
         const label = document.createElement("label")
-        label.textContent = option.viewName ?? elm.name;
+        label.textContent = `(${option.condition_cd})${option.search_form_name ?? elm.name}`;
         div.append(label);
         div.append(elm);
         this.append(div)
@@ -88,8 +91,6 @@ export class SearchForm extends HTMLFormElement {
     const div = document.createElement("div")
     const elm = document.createElement("button")
     elm.id = "searchButton"
-    elm.name = "action";
-    elm.value = "search";
     elm.textContent = "検索";
     elm.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -105,11 +106,8 @@ export class SearchForm extends HTMLFormElement {
     const options = await this.#fetchOption()
     for (const [key, data] of formData) {
       if (data != "") {
-        const opt = options.find(o => o.column_cd === key);
-        if (!opt) {
-          continue
-        }
-        switch (opt.type) {
+        const opt = options.find(o => o.column_cd === key) ?? {};
+        switch (opt?.type) {
           case "checkbox":
             if (data == "true") {
               params[key] = true;

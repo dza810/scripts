@@ -1,3 +1,4 @@
+from abc import abstractmethod, ABC
 import sqlite3
 from typing import Annotated, Any
 
@@ -24,6 +25,11 @@ DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+class Register(BaseModel):
+    updateList: list[dict]
+    deleteList: list[Any]
+    insertList: list[dict]
+
 
 class InvalidKeyException(Exception):
     def __init__(self, name: str):
@@ -42,19 +48,19 @@ async def root():
     return FileResponse("index.html")
 
 
-def handleSqlValue(v):
+def handleSqlValue(v) -> str:
     if v is None:
         return "NULL"
     if v is True:
-        return 1
+        return "1"
     if v is False:
-        return 0
-    return v
+        return "0"
+    return str(v)
 
 
-def makeEqCondition(k, v):
+def makeEqCondition(k, v) -> tuple[str, Any]:
     if v is None:
-        return f"`{k}` is ?", "NULL"
+        return f"`{k}` is NULL", None
     else:
         return f"`{k}` = ?", handleSqlValue(v)
 
@@ -85,14 +91,13 @@ def update(con, table_name, data: dict, where: dict):
       {" AND ".join(v[0] for v in conditions)}
     """
     print(sql)
-    params = list(data.values()) + [v[1] for v in conditions]
+    params = list(data.values()) + [v[1] for v in conditions if v[1] is not None]
     print(params)
     return con.execute(sql, params)
 
 
 def _getClass(con, class_cd):
-    return con.execute(
-        """
+    sql = """
       SELECT
         class_dtl_cd as value,
         class_dtl_name as name
@@ -100,39 +105,72 @@ def _getClass(con, class_cd):
       JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
       WHERE class_master.class_cd = :class_cd
       ORDER BY class_dtl_master.view_order
-      """,
-        {"class_cd": class_cd},
-    ).fetchall()
+      """
+    print("_getClass")
+    print(sql)
+    print(class_cd)
+    return con.execute(sql, {"class_cd": class_cd}).fetchall()
 
 
-class ScreenCls:
+class ScreenCls(ABC):
     def __init__(self, con, screen_cd):
         self.con = con
         self.screen_cd = screen_cd
 
-    def _search(self, params, table_name, order_by):
-        conditions = [makeEqCondition(k, v) for k, v in params.items()]
+    @abstractmethod
+    def update(self, update: Register): ...
+
+    @abstractmethod
+    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]: ...
+
+    def make_condition(self, params) -> list[tuple[str, Any]]:
+        options = {v["search_form_cd"]: v for v in self.getSearchForm()}
+        queries = []
+        for key, value in params.items():
+            option = options.get(key)
+            print(option)
+            query: tuple[str, Any] | None = None
+            column_cd = option.get("column_cd")
+            if column_cd is None:
+                continue
+            match option["condition_cd"]:
+                case "equal":
+                    query = makeEqCondition(column_cd, value)
+                case "lesser_than_or_equal":
+                    query = f"`{column_cd}` <= ?", handleSqlValue(value)
+                case _:
+                    print('skip', option)
+            if query is not None:
+                queries.append(query)
+        return queries
+
+    def run_search(self, table_name: str, order_by: list[str], params: dict[str, Any]):
+        print(table_name, order_by, params)
+        conditions = self.make_condition(params)
         sql = f"""
             SELECT
                 rowid as id,
                 *
             FROM {table_name}
-            {"" if len(params) == 0 else f"WHERE {' AND '.join(v[0] for v in conditions)}"}
+            {"" if len(conditions) == 0 else f"WHERE {' AND '.join(v[0] for v in conditions)}"}
             ORDER BY {", ".join(order_by)}
         """
         print(sql)
-        params = [v[1] for v in conditions]
-        print(params)
-        return self.con.execute(sql, params).fetchall()
+        paramsSql = [v[1] for v in conditions]
+        print(paramsSql)
+        return self.con.execute(sql, paramsSql).fetchall()
+
+    def _search(self, params: dict[str, Any], table_name, order_by):
+        return self.run_search(table_name, order_by, params)
 
     def run_insert(self, table_name, data):
         print("insert", table_name, data)
-        self._check_key(data.keys())
+        self._check_column_key(data.keys())
         return insert(self.con, table_name, data)
 
     def run_update(self, table_name, data, where):
         print("update", table_name, data)
-        self._check_key(data.keys())
+        self._check_column_key(data.keys())
         return update(self.con, table_name, data, where)
 
     def _update(self, table_name, update):
@@ -147,7 +185,7 @@ class ScreenCls:
                 {f"{table_name}_id": upd_row["id"]},
             )
 
-    def _check_key(self, keys):
+    def _check_column_key(self, keys):
         columns = {
             v
             for v in {col.get("column_name") for col in self.getColumnOptions()}
@@ -184,9 +222,31 @@ class ScreenCls:
             {"screen_cd": self.screen_cd},
         ).fetchall()
 
+    def getSearchForm(self):
+        return self.con.execute(
+            """
+            SELECT
+                search_form.search_form_cd,
+                search_form.search_form_name,
+                column.column_cd,
+                column.column_name,
+                column.type,
+                column.dropdown_class_cd,
+                search_form.view_order,
+                search_form_condition.condition_cd
+            FROM search_form
+            JOIN search_form_condition ON search_form.condition_id = search_form_condition.search_form_condition_id
+            JOIN column ON search_form.column_id = column.column_id
+            JOIN screen ON screen.screen_id = search_form.screen_id
+            WHERE screen_cd = :screen_cd
+            ORDER BY search_form.view_order, search_form.search_form_cd, search_form.search_form_name
+            """,
+            {"screen_cd": self.screen_cd},
+        ).fetchall()
+
 
 class ScreenMaster(ScreenCls):
-    def search(self, params):
+    def search(self, params: dict[str, Any]):
         return self._search(params, "screen", ["screen_cd"])
 
     def update(self, update):
@@ -225,21 +285,24 @@ class ClassDtlMaster(ScreenCls):
         self._update("class_dtl_master", update)
 
 
+class SearchFormMaster(ScreenCls):
+    def search(self, params):
+        return self._search(params, "search_form", ["search_form_id"])
+
+    def update(self, update):
+        self._update("search_form", update)
+
+
 class RowStyleMaster(ScreenCls):
     def search(self, params):
-        sql = f"""
-            SELECT
-                row_style.rowid as id,
-                row_style.*
-            FROM row_style
-            {"" if len(params) == 0 else f"WHERE {" AND ".join(makeEqCondition(k, v) for k, v in params.items())}"}
-            ORDER BY 1, 2, 3
-        """
-        print(sql)
-        return self.con.execute(sql).fetchall()
+        return self._search(params, "row_style", ["1", "2", "3"])
 
     def update(self, update):
         self._update("row_style", update)
+
+
+class InvalidScreenException(Exception):
+    pass
 
 
 def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
@@ -256,23 +319,17 @@ def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
         return ClassDtlMaster(con, screen_cd)
     if screen_cd == "row_style_master":
         return RowStyleMaster(con, screen_cd)
-    raise Exception("invalid screen code")
+    if screen_cd == "search_form_master":
+        return SearchFormMaster(con, screen_cd)
+    raise InvalidScreenException(screenCd)
 
 
 Screen = Annotated[ScreenCls, Depends(get_screen)]
 
 
 @app.post("/search")
-async def search(
-    screen: Screen, params: dict[str, Any], dbConnection: DbConnection
-) -> list[dict[str, Any]]:
+async def search(screen: Screen, params: dict[str, Any]) -> list[dict[str, Any]]:
     return screen.search(params["params"])
-
-
-class Register(BaseModel):
-    updateList: list[dict]
-    deleteList: list[Any]
-    insertList: list[dict]
 
 
 @app.post("/register")
@@ -290,7 +347,18 @@ async def getColumns(screen: Screen, dbConnection: DbConnection):
     columnOptions = screen.getColumnOptions()
     for col in columnOptions:
         if col["type"] == "dropdown":
+            print("_getClass")
             col["classes"] = _getClass(dbConnection, col["dropdown_class_cd"])
 
     rowStyles = screen.getRowStyle()
     return {"columnOptions": columnOptions, "rowStyles": rowStyles}
+
+
+@app.get("/getSearchForms")
+async def getSearchForms(screen: Screen):
+    searchForms = screen.getSearchForm()
+    return searchForms
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)

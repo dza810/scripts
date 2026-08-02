@@ -1,5 +1,6 @@
 import pprint
 import sqlite3
+from typing import Any
 
 
 def dict_factory(cursor, row):
@@ -20,6 +21,8 @@ class Column:
     data_type: str
     in_uniq: bool
     not_null: bool
+    default: Any
+    dropdown_class_cd: str | None
 
 
 def column(
@@ -36,9 +39,11 @@ def column(
     col.code = code
 
     if data_type is None:
-        if type_ == "number":
+        if type_ == "dropdown":
+            col.data_type = "text"
+        elif type_ == "number":
             col.data_type = "integer"
-        if type_ == "checkbox":
+        elif type_ == "checkbox":
             col.data_type = "boolean"
         else:
             col.data_type = type_
@@ -92,6 +97,27 @@ column_table = table(
     ],
 )
 
+search_form_condition_table = table(
+    "search_form_condition",
+    [
+        column("condition_cd", "text", in_uniq=True, not_null=True),
+        column("condition_name", "text", not_null=True),
+    ],
+)
+
+search_form_table = table(
+    "search_form",
+    [
+        column("screen_id", "text", in_uniq=True, not_null=True),
+        column("search_form_cd", "text", in_uniq=True, not_null=True),
+        column("search_form_name", "text", in_uniq=True, not_null=True),
+        column("column_id", "number", not_null=True),
+        column("condition_id", "number", not_null=True),
+        column("view_order", "number", not_null=True),
+        column("required", "checkbox", not_null=True, default=0),
+    ],
+)
+
 
 row_style_table = table(
     "row_style",
@@ -101,23 +127,6 @@ row_style_table = table(
         column("row_style_name", "text", not_null=True),
         column("row_style_code_condition", "text"),
         column("row_style_code_style", "text"),
-    ],
-)
-
-car_table = table(
-    "car",
-    [
-        column(
-            "make",
-            "dropdown",
-            data_type="text",
-            in_uniq=True,
-            not_null=True,
-            dropdown_class_cd="make",
-        ),
-        column("model", "text", in_uniq=True),
-        column("price", "number"),
-        column("electric", "checkbox"),
     ],
 )
 
@@ -137,6 +146,23 @@ class_dtl_table = table(
         column("class_dtl_name", "text", not_null=True),
         column("is_default", "checkbox", not_null=True, default=0),
         column("view_order", "number"),
+    ],
+)
+
+car_table = table(
+    "car",
+    [
+        column(
+            "make",
+            "dropdown",
+            data_type="text",
+            in_uniq=True,
+            not_null=True,
+            dropdown_class_cd="make",
+        ),
+        column("model", "text", in_uniq=True),
+        column("price", "number"),
+        column("electric", "checkbox"),
     ],
 )
 
@@ -182,17 +208,17 @@ def insert(con, table_name, data: dict):
     return con.execute(sql, data)
 
 
-def make_table(con, table, screen_cd, screen_name):
-    con.execute(create_table_sql(table))
-
+def setup_table_util(con, table, screen_cd, screen_name):
     screen_id = insert(
-        con, "screen", {"screen_cd": screen_cd, "screen_name": screen_name}
+        con,
+        screen_table.name,
+        {"screen_cd": screen_cd, "screen_name": screen_name},
     ).lastrowid
 
     for i, col in enumerate(table.cols):
-        insert(
+        column_id = insert(
             con,
-            "column",
+            column_table.name,
             {
                 "screen_id": screen_id,
                 "view_order": i,
@@ -201,66 +227,38 @@ def make_table(con, table, screen_cd, screen_name):
                 "type": col.type_,
                 "dropdown_class_cd": col.dropdown_class_cd,
             },
+        ).lastrowid
+
+        insert(
+            con,
+            search_form_table.name,
+            {
+                "screen_id": screen_id,
+                "search_form_cd": col.code,
+                "search_form_name": col.code,
+                "column_id": column_id,
+                "condition_id": 1,  # equal
+                "view_order": i,
+            },
         )
+
+
+def make_table(con, table, screen_cd, screen_name):
+    con.execute(create_table_sql(table))
+    setup_table_util(con, table, screen_cd, screen_name)
 
 
 def setup_screen_column(con):
     con.execute(create_table_sql(screen_table))
     con.execute(create_table_sql(column_table))
+    con.execute(create_table_sql(search_form_table))
 
-    # insert
-    screen_master_id = insert(
-        con,
-        screen_table.name,
-        {"screen_cd": "screen_master", "screen_name": "画面管理"},
-    ).lastrowid
-
-    column_master_id = insert(
-        con,
-        screen_table.name,
-        {"screen_cd": "column_master", "screen_name": "列管理"},
-    ).lastrowid
-
-    ## 画面管理用の設定
-    for i, col in enumerate(screen_table.cols):
-        insert(
-            con,
-            column_table.name,
-            {
-                "screen_id": screen_master_id,
-                "view_order": i,
-                "column_cd": col.code,
-                "column_name": col.code,
-                "type": col.type_,
-            },
-        )
-
-    for i, col in enumerate(column_table.cols):
-        insert(
-            con,
-            column_table.name,
-            {
-                "screen_id": column_master_id,
-                "view_order": i,
-                "column_cd": col.code,
-                "column_name": col.code,
-                "type": col.type_,
-            },
-        )
+    setup_table_util(con, screen_table, "screen_master", "画面管理")
+    setup_table_util(con, column_table, "column_master", "列管理")
+    setup_table_util(con, search_form_table, "search_form_master", "検索条件管理")
 
 
 def setup_class_tables(con):
-    # con.execute("DROP TABLE IF EXISTS class_master")
-    # con.execute("DROP TABLE IF EXISTS class_dtl_master")
-    # con.execute(
-    #     "DELETE FROM column WHERE screen_id = (SELECT screen_id FROM screen WHERE screen_cd = 'class_master')"
-    # )
-    # con.execute(
-    #     "DELETE FROM column WHERE screen_id = (SELECT screen_id FROM screen WHERE screen_cd = 'class_dtl_master')"
-    # )
-    # con.execute("DELETE FROM screen WHERE screen_cd = 'class_master'")
-    # con.execute("DELETE FROM screen WHERE screen_cd = 'class_dtl_master'")
-
     make_table(con, class_table, "class_master", "区分値管理")
     make_table(con, class_dtl_table, "class_dtl_master", "区分値明細管理")
 
@@ -275,20 +273,19 @@ def setup_class_tables(con):
         )
 
 
-def setup_row_style(con):
-    table = row_style_table
-    screen_cd = "row_style_master"
-    # con.execute(f"DROP TABLE IF EXISTS {table.name}")
-    # con.execute(
-    #     "DELETE FROM column WHERE screen_id = (SELECT screen_id FROM screen WHERE screen_cd = ?)",
-    #     [screen_cd],
-    # )
-    # con.execute("DELETE FROM screen WHERE screen_cd = ?", [screen_cd])
-
-    make_table(con, table, screen_cd, "行スタイルマスタ")
+def get_screen_id(con, screen_cd):
     screen_id = con.execute(
         "SELECT screen_id FROM screen WHERE screen_cd = ?", [screen_cd]
     ).fetchone()["screen_id"]
+    return screen_id
+
+
+def setup_row_style(con):
+    table = row_style_table
+    screen_cd = "row_style_master"
+
+    make_table(con, table, screen_cd, "行スタイルマスタ")
+    screen_id = get_screen_id(con, screen_cd)
     insert(
         con,
         table.name,
@@ -296,8 +293,28 @@ def setup_row_style(con):
     )
 
 
+def setup_search_form_condition(con):
+    table = search_form_condition_table
+    screen_cd = "search_form_condition"
+
+    make_table(con, table, screen_cd, "検索フォーム条件マスタ")
+    insert(con, table.name, {"condition_cd": "equal", "condition_name": "等しい"})
+    insert(
+        con,
+        table.name,
+        {"condition_cd": "lesser_than_or_equal", "condition_name": "以下"},
+    )
+    insert(
+        con,
+        table.name,
+        {"condition_cd": "greater_than_or_equal", "condition_name": "以下"},
+    )
+    insert(con, table.name, {"condition_cd": "between", "condition_name": "間"})
+
+
 with connect() as con:
     setup_screen_column(con)
+    setup_search_form_condition(con)
     setup_row_style(con)
     make_table(con, car_table, "car_list", "カーリスト")
     setup_class_tables(con)
