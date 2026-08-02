@@ -9,7 +9,6 @@ from loguru import logger
 from pydantic import BaseModel
 
 from proj.db import (
-    ConditionCode,
     delete,
     get_connection,
     getClass,
@@ -61,9 +60,6 @@ class ScreenCls(ABC):
     @abstractmethod
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]: ...
 
-    def make_condition_query(self, column, condition: ConditionCode, value):
-        return makeConditionQuery(column, condition, value)
-
     def make_condition(self, params) -> list[tuple[str, Any]]:
         options = {v["search_form_cd"]: v for v in self.getSearchForm()}
         queries = []
@@ -72,7 +68,7 @@ class ScreenCls(ABC):
             if option is None:
                 raise InvalidKeyException(key)
             queries.extend(
-                self.make_condition_query(option["column_cd"], option["condition_cd"], value)
+                makeConditionQuery(option["column_cd"], option["condition_cd"], value)
             )
         return queries
 
