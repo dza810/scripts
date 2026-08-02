@@ -116,6 +116,31 @@ def test_api_register_injection_key_418(api_client: TestClient) -> None:
     assert r.status_code == 418
 
 
+# -------------------------------------------------------------
+# CSRFトークン検証
+# -------------------------------------------------------------
+def test_api_get_csrf_token_sets_cookie(api_client: TestClient) -> None:
+    r = api_client.get("/getCsrfToken")
+    assert r.status_code == 200
+    assert r.json() == {"type": "ok"}
+    assert api_client.cookies.get("csrftoken")
+
+
+def test_api_csrf_missing_token_rejected(api_client_no_csrf: TestClient) -> None:
+    r = api_client_no_csrf.post("/search?screenCd=car_list", json={"params": {}})
+    assert r.status_code == 403
+
+
+def test_api_csrf_wrong_token_rejected(api_client_no_csrf: TestClient) -> None:
+    api_client_no_csrf.get("/getCsrfToken")
+    r = api_client_no_csrf.post(
+        "/search?screenCd=car_list",
+        json={"params": {}},
+        headers={"csrftoken": "wrong-token"},
+    )
+    assert r.status_code == 403
+
+
 def test_api_injection_no_table_damage(api_client: TestClient) -> None:
     payloads = ["' OR '1'='1", "' UNION SELECT 1,2,3,4--", "'; DROP TABLE car;--"]
     for payload in payloads:

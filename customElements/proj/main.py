@@ -1,11 +1,11 @@
+import hmac
+import secrets
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Annotated, Any
-import secrets
-import hmac
 
-from fastapi import Depends, FastAPI, Request, Response, Header, Cookie
+from fastapi import Cookie, Depends, FastAPI, Header, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -40,17 +40,25 @@ async def get_csrf_token(response: Response):
     response.set_cookie(key="csrftoken", value=token, samesite="lax")
     return {'type': 'ok'}
 
+
+@app.exception_handler(CsrfException)
+async def csrf_exception_handler(
+    request: Request, exc: CsrfException
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=403, content={"message": "csrf token mismatch"}
+    )
+
+
 async def check_csrf_token(
-        token_header: Annotated[str | None, Header(alias="csrftoken")],
-        token_cookie: Annotated[str | None, Cookie(alias="csrftoken")]
+        token_header: Annotated[str | None, Header(alias="csrftoken")] = None,
+        token_cookie: Annotated[str | None, Cookie(alias="csrftoken")] = None,
     ):
-    print(token_header)
     if token_header is None or token_cookie is None:
-        raise CsrfException(f'{token_header} <> {token_cookie}')
+        raise CsrfException()
 
     if not hmac.compare_digest(token_header.encode(), token_cookie.encode()):
-        raise CsrfException(f'{repr(token_header)} <> {str(token_cookie)}')
-    return
+        raise CsrfException()
 
 CheckCsrfToken = Annotated[None, Depends(check_csrf_token)]
 
@@ -95,31 +103,29 @@ class ScreenCls(ABC):
         options = { v["search_form_cd"]: v for v in self.getSearchForm() }
         queries = []
         new_params = {}
-        for key in params:
+        for key, value in params.items():
             if "::" in key:
                 keys = key.split("::")
-                new_params[keys[0]]  = new_params.get(keys[0], {})
-                valueTmp = new_params[keys[0]] 
+                new_params[keys[0]] = new_params.get(keys[0], {})
+                valueTmp = new_params[keys[0]]
                 for k in keys[1:-1]:
                     valueTmp[k] = valueTmp.get(k, {})
                     valueTmp = valueTmp[k]
-                valueTmp[keys[-1]] = params[key]
+                valueTmp[keys[-1]] = value
             else:
-                new_params[key] = params[key]
+                new_params[key] = value
 
-        del params
-
-        for key in new_params:
+        for key, value in new_params.items():
             option = options.get(key)
             if option is None:
                 raise InvalidKeyException(key)
             if option["type"] == "checkbox":
-                if new_params[key] == "false":
+                if value == "false":
                     new_params[key] = False
-                elif new_params[key] == "true":
+                elif value == "true":
                     new_params[key] = True
                 else:
-                    raise Exception("invalid value")
+                    raise ValueError(f"invalid value: {key}")
 
         for key, value in new_params.items():
             option = options.get(key)

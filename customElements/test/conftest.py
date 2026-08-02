@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +9,25 @@ from proj import setup_sqlite
 from proj.db import dict_factory, get_connection_sync, insert
 from proj.main import app, get_connection
 
-client: TestClient = TestClient(app)
+
+class CsrfTestClient(TestClient):
+    def _ensure_csrf(self) -> None:
+        if self.cookies.get("csrftoken") is None:
+            resp = TestClient.request(self, "GET", "/getCsrfToken")
+            assert resp.status_code == 200
+
+    def request(self, method: str, url: str, **kwargs):
+        self._ensure_csrf()
+        headers = kwargs.get("headers")
+        if headers is None:
+            headers = {}
+            kwargs["headers"] = headers
+        headers.setdefault("csrftoken", self.cookies.get("csrftoken"))
+        return super().request(method, url, **kwargs)
+
+
+client: TestClient = CsrfTestClient(app)
+plain_client: TestClient = TestClient(app)
 
 
 @pytest.fixture(scope="function")
@@ -48,6 +67,18 @@ def insert_cars(db_connection_with_tables: sqlite3.Connection) -> sqlite3.Connec
 
 @pytest.fixture(scope="function")
 def api_client() -> Iterator[TestClient]:
+    with _api_db():
+        yield client
+
+
+@pytest.fixture(scope="function")
+def api_client_no_csrf() -> Iterator[TestClient]:
+    with _api_db():
+        yield plain_client
+
+
+@contextmanager
+def _api_db() -> Iterator[None]:
     with sqlite3.connect(":memory:", check_same_thread=False) as con:
         con.row_factory = dict_factory
         con.autocommit = False
@@ -57,5 +88,7 @@ def api_client() -> Iterator[TestClient]:
             yield con
 
         app.dependency_overrides[get_connection] = override_get_connection
-        yield client
-        app.dependency_overrides.clear()
+        try:
+            yield
+        finally:
+            app.dependency_overrides.clear()
