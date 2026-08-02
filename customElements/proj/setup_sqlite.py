@@ -2,9 +2,7 @@ import sqlite3
 from typing import Any
 
 
-def dict_factory(
-    cursor: sqlite3.Cursor, row: tuple[Any, ...]
-) -> dict[str, Any]:
+def dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
@@ -38,7 +36,7 @@ def column(
     default: Any = None,
     dropdown_class_cd: str | None = None,
     max_length: int | None = None,
-    editable: bool = True
+    editable: bool = True,
 ) -> Column:
     col = Column()
     col.code = code
@@ -187,7 +185,9 @@ def create_table_sql(table: Table) -> str:
                     f"`{col.code}`",
                     col.data_type,
                     "NOT NULL" if col.not_null else None,
-                    f"DEFAULT {"'" + col.default + "'" if isinstance(col.default, str) else col.default }" if col.default is not None else None,
+                    f"DEFAULT {"'" + col.default + "'" if isinstance(col.default, str) else col.default}"
+                    if col.default is not None
+                    else None,
                 ]
                 if v != "" and v is not None
             )
@@ -339,7 +339,6 @@ def setup_search_form_condition(con: sqlite3.Connection) -> None:
     insert(con, table.name, {"condition_cd": "between", "condition_name": "間"})
 
 
-
 def setup(con: sqlite3.Connection):
     setup_screen_column(con)
     setup_search_form_condition(con)
@@ -347,8 +346,10 @@ def setup(con: sqlite3.Connection):
     make_table(con, car_table, "car_list", "カーリスト")
     setup_class_tables(con)
 
+
 if __name__ == "__main__":
     import sys
+
     dbname = sys.argv[1]
     assert dbname, "dbname を指定してください"
     with connect(dbname) as con:

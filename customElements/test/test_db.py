@@ -53,15 +53,15 @@ def test_dict_factory(db_connection: sqlite3.Connection) -> None:
 
 def test_handleSqlValue() -> None:
     tests = [
-        { 'i': 1, 'o': '1'},
-        { 'i': 1.2, 'o': '1.2'},
-        { 'i': None, 'o': 'NULL'},
-        { 'i': True, 'o': '1'},
-        { 'i': False, 'o': '0'},
+        {"i": 1, "o": "1"},
+        {"i": 1.2, "o": "1.2"},
+        {"i": None, "o": "NULL"},
+        {"i": True, "o": "1"},
+        {"i": False, "o": "0"},
     ]
-    for test in  tests:
-        i = test['i']
-        o = test['o']
+    for test in tests:
+        i = test["i"]
+        o = test["o"]
         assert handleSqlValue(i) == o
 
 
@@ -81,7 +81,7 @@ def test_insert(db_connection: sqlite3.Connection) -> None:
     con = db_connection
     data = {
         "uk_num1": 1,
-        "uk_text1": 'a',
+        "uk_text1": "a",
         "uk_bool1": 0,
         "text2": "'; delete test",
     }
@@ -90,7 +90,7 @@ def test_insert(db_connection: sqlite3.Connection) -> None:
     rowid = cur.lastrowid
     result = con.execute("SELECT * FROM test ORDER BY rowid").fetchall()
     assert len(result) == 1
-    assert result[0] == data | { 'test_id': rowid }
+    assert result[0] == data | {"test_id": rowid}
 
 
 def test_update(db_connection: sqlite3.Connection) -> None:
@@ -99,29 +99,30 @@ def test_update(db_connection: sqlite3.Connection) -> None:
         {
             "test_id": test_id,
             "uk_num1": 1,
-            "uk_text1": 'a',
+            "uk_text1": "a",
             "uk_bool1": 0,
             "text2": "xxxx",
-        }, {
+        },
+        {
             "uk_num1": 2,
-            "uk_text1": 'a',
+            "uk_text1": "a",
             "uk_bool1": 0,
             "text2": "'; delete test",
-        }
+        },
     ]
     update_data = {
         "uk_num1": 99,
-        "uk_text1": 'abc',
+        "uk_text1": "abc",
         "uk_bool1": 1,
         "text2": "'; delete from test;",
     }
     for d in insert_data:
         insert(db_connection, "test", d)
-    update(db_connection, "test", update_data, {'test_id': 1} )
+    update(db_connection, "test", update_data, {"test_id": 1})
     result = db_connection.execute("SELECT * FROM test ORDER BY rowid").fetchall()
     assert len(result) == 2
-    assert result[0] == update_data | { 'test_id': 1 }
-    assert result[1] == insert_data[1] | {'test_id': 2}
+    assert result[0] == update_data | {"test_id": 1}
+    assert result[1] == insert_data[1] | {"test_id": 2}
 
 
 def test_insert_empty_data(db_connection: sqlite3.Connection) -> None:
@@ -140,12 +141,16 @@ def test_insert_injection_value(db_connection: sqlite3.Connection) -> None:
         "text2": "'); DROP TABLE test; --",
     }
     insert(db_connection, "test", data)
-    insert(db_connection, "test", {
-        "uk_num1": 2,
-        "uk_text1": "b",
-        "uk_bool1": 0,
-        "text2": "safe",
-    })
+    insert(
+        db_connection,
+        "test",
+        {
+            "uk_num1": 2,
+            "uk_text1": "b",
+            "uk_bool1": 0,
+            "text2": "safe",
+        },
+    )
     result = db_connection.execute("SELECT * FROM test ORDER BY rowid").fetchall()
     assert len(result) == 2
     assert result[0]["text2"] == "'); DROP TABLE test; --"
@@ -172,20 +177,28 @@ def test_update_injection_value(db_connection: sqlite3.Connection) -> None:
 
 
 def test_delete_injection_value(db_connection: sqlite3.Connection) -> None:
-    insert(db_connection, "test", {
-        "test_id": 1,
-        "uk_num1": 1,
-        "uk_text1": "a",
-        "uk_bool1": 0,
-        "text2": "x",
-    })
-    insert(db_connection, "test", {
-        "test_id": 2,
-        "uk_num1": 2,
-        "uk_text1": "b",
-        "uk_bool1": 0,
-        "text2": "y",
-    })
+    insert(
+        db_connection,
+        "test",
+        {
+            "test_id": 1,
+            "uk_num1": 1,
+            "uk_text1": "a",
+            "uk_bool1": 0,
+            "text2": "x",
+        },
+    )
+    insert(
+        db_connection,
+        "test",
+        {
+            "test_id": 2,
+            "uk_num1": 2,
+            "uk_text1": "b",
+            "uk_bool1": 0,
+            "text2": "y",
+        },
+    )
     delete(db_connection, "test", {"test_id": "' OR '1'='1"})
     result = db_connection.execute("SELECT * FROM test ORDER BY rowid").fetchall()
     assert len(result) == 2
@@ -193,30 +206,34 @@ def test_delete_injection_value(db_connection: sqlite3.Connection) -> None:
 
 def test_getClass(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
-    cur = insert(con, "class_master", {
-        "class_cd": 'testclass',
-        "class_name": 'テスト区分',
-    })
+    cur = insert(
+        con,
+        "class_master",
+        {
+            "class_cd": "testclass",
+            "class_name": "テスト区分",
+        },
+    )
     assert cur is not None
     class_id = cur.lastrowid
     data = [
         {
-            'class_id': class_id,
-            'class_dtl_cd': 'testclass_1',
-            'class_dtl_name': 'テストクラス1',
-            'view_order': 10
+            "class_id": class_id,
+            "class_dtl_cd": "testclass_1",
+            "class_dtl_name": "テストクラス1",
+            "view_order": 10,
         },
         {
-            'class_id': class_id,
-            'class_dtl_cd': 'testclass_2',
-            'class_dtl_name': 'テストクラス2',
-            'view_order': 9
+            "class_id": class_id,
+            "class_dtl_cd": "testclass_2",
+            "class_dtl_name": "テストクラス2",
+            "view_order": 9,
         },
         {
-            'class_id': class_id,
-            'class_dtl_cd': 'xxx',
-            'class_dtl_name': 'yyy',
-            'view_order': 8
+            "class_id": class_id,
+            "class_dtl_cd": "xxx",
+            "class_dtl_name": "yyy",
+            "view_order": 8,
         },
     ]
     for d in data:
@@ -224,35 +241,48 @@ def test_getClass(db_connection_with_tables: sqlite3.Connection) -> None:
 
     result = getClass(con, "testclass")
     assert result == [
-            {'value': 'xxx', 'name': 'yyy'},
-            {'value': 'testclass_2', 'name': 'テストクラス2'},
-            {'value': 'testclass_1', 'name': 'テストクラス1'},
+        {"value": "xxx", "name": "yyy"},
+        {"value": "testclass_2", "name": "テストクラス2"},
+        {"value": "testclass_1", "name": "テストクラス1"},
     ]
 
 
-def test_getClass_injection_value(db_connection_with_tables: sqlite3.Connection) -> None:
+def test_getClass_injection_value(
+    db_connection_with_tables: sqlite3.Connection,
+) -> None:
     con = db_connection_with_tables
-    cur = insert(con, "class_master", {
-        "class_cd": "testclass",
-        "class_name": "テスト区分",
-    })
+    cur = insert(
+        con,
+        "class_master",
+        {
+            "class_cd": "testclass",
+            "class_name": "テスト区分",
+        },
+    )
     assert cur is not None
-    insert(con, "class_dtl_master", {
-        "class_id": cur.lastrowid,
-        "class_dtl_cd": "testclass_1",
-        "class_dtl_name": "テストクラス1",
-        "view_order": 10,
-    })
+    insert(
+        con,
+        "class_dtl_master",
+        {
+            "class_id": cur.lastrowid,
+            "class_dtl_cd": "testclass_1",
+            "class_dtl_name": "テストクラス1",
+            "view_order": 10,
+        },
+    )
     assert getClass(con, "' OR '1'='1") == []
     assert getClass(con, "testclass') --") == []
 
 
-@pytest.mark.parametrize("payload", [
-    "' OR '1'='1",
-    "' UNION SELECT class_dtl_cd, class_dtl_name FROM class_dtl_master--",
-    "' AND 1=1--",
-    "testclass' --",
-])
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "' OR '1'='1",
+        "' UNION SELECT class_dtl_cd, class_dtl_name FROM class_dtl_master--",
+        "' AND 1=1--",
+        "testclass' --",
+    ],
+)
 def test_getClass_injection_values_safe(
     db_connection_with_tables: sqlite3.Connection, payload: str
 ) -> None:
@@ -277,7 +307,9 @@ def test_select_order_by_injection_escaped(insert_cars: sqlite3.Connection) -> N
         select(con, "car", ["price; DROP TABLE car;--"], [])
 
 
-def test_insert_column_name_injection_escaped(db_connection: sqlite3.Connection) -> None:
+def test_insert_column_name_injection_escaped(
+    db_connection: sqlite3.Connection,
+) -> None:
     con = db_connection
     data = {
         "uk_text1`: 1, text2 = 'x' --": 1,

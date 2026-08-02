@@ -14,9 +14,7 @@ ConditionCode = Literal[
 ]
 
 
-def dict_factory(
-    cursor: sqlite3.Cursor, row: tuple[Any, ...]
-) -> dict[str, Any]:
+def dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
@@ -25,6 +23,8 @@ def dict_factory(
 async なしの場合 fastapi が別スレッドで動かしてしまう。
 => handler メソッドで async にできるようにここにもつける
 """
+
+
 async def get_connection(
     dbname: str = "data.db",
 ) -> AsyncIterator[sqlite3.Connection]:
@@ -63,6 +63,7 @@ def makeEqCondition(k: str, v: Any) -> tuple[str, Any]:
     else:
         return f"{quote_ident(k)} = ?", handleSqlValue(v)
 
+
 def insert(
     con: sqlite3.Connection,
     table_name: str,
@@ -98,8 +99,9 @@ def update(
       {" AND ".join(v[0] for v in conditions)}
     """
     params = list(data.values()) + [v[1] for v in conditions if v[1] is not None]
-    logger.debug('sql=', sql, 'params=', params)
+    logger.debug("sql=", sql, "params=", params)
     return con.execute(sql, params)
+
 
 def delete(
     con: sqlite3.Connection,
@@ -113,7 +115,7 @@ def delete(
       {" AND ".join(v[0] for v in conditions)}
     """
     params = [v[1] for v in conditions if v[1] is not None]
-    logger.debug('sql=', sql, 'params=', params)
+    logger.debug("sql=", sql, "params=", params)
     return con.execute(sql, params)
 
 
@@ -132,7 +134,7 @@ def select(
         ORDER BY {", ".join(quote_ident(c) for c in order_by)}
     """
     paramsSql = [v[1] for v in conditions]
-    logger.debug('sql=', sql, 'params=', paramsSql)
+    logger.debug("sql=", sql, "params=", paramsSql)
     return con.execute(sql, paramsSql).fetchall()
 
 
@@ -150,21 +152,28 @@ def makeConditionQuery(
         case "between":
             value_from = value.get("from")
             if value_from:
-                queries.append((f"{quote_ident(column)} >= ?", handleSqlValue(value_from)))
+                queries.append(
+                    (f"{quote_ident(column)} >= ?", handleSqlValue(value_from))
+                )
             value_to = value.get("to")
             if value_to:
-                queries.append((f"{quote_ident(column)} <= ?", handleSqlValue(value_to)))
+                queries.append(
+                    (f"{quote_ident(column)} <= ?", handleSqlValue(value_to))
+                )
         case "contains":
             for word in value.split(" "):
-                queries.append((f"{quote_ident(column)} like ('%' || ? || '%')", handleSqlValue(word)))
+                queries.append(
+                    (
+                        f"{quote_ident(column)} like ('%' || ? || '%')",
+                        handleSqlValue(word),
+                    )
+                )
         case _:
-            logger.warning('skip', condition)
+            logger.warning("skip", condition)
     return queries
 
 
-def getClass(
-    con: sqlite3.Connection, class_cd: str
-) -> list[dict[str, Any]]:
+def getClass(con: sqlite3.Connection, class_cd: str) -> list[dict[str, Any]]:
     sql = """
       SELECT
         class_dtl_cd as value,
@@ -175,13 +184,11 @@ def getClass(
       ORDER BY class_dtl_master.view_order
       """
     params = {"class_cd": class_cd}
-    logger.debug('sql=', sql, 'params=', params)
+    logger.debug("sql=", sql, "params=", params)
     return con.execute(sql, params).fetchall()
 
 
-def getRowStyle(
-    con: sqlite3.Connection, screen_cd: str
-) -> list[dict[str, Any]]:
+def getRowStyle(con: sqlite3.Connection, screen_cd: str) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT
@@ -196,9 +203,7 @@ def getRowStyle(
     ).fetchall()
 
 
-def getColumnOptions(
-    con: sqlite3.Connection, screen_cd: str
-) -> list[dict[str, Any]]:
+def getColumnOptions(con: sqlite3.Connection, screen_cd: str) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT *
@@ -211,9 +216,7 @@ def getColumnOptions(
     ).fetchall()
 
 
-def getSearchForm(
-    con: sqlite3.Connection, screen_cd: str
-) -> list[dict[str, Any]]:
+def getSearchForm(con: sqlite3.Connection, screen_cd: str) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT

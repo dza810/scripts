@@ -56,12 +56,26 @@ def db_connection_with_tables(
 
 @pytest.fixture(scope="function")
 def insert_cars(db_connection_with_tables: sqlite3.Connection) -> sqlite3.Connection:
-    insert(db_connection_with_tables, "car", {
-        "make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1,
-    })
-    insert(db_connection_with_tables, "car", {
-        "make": "Ford", "model": "Focus", "price": 30000, "electric": 0,
-    })
+    insert(
+        db_connection_with_tables,
+        "car",
+        {
+            "make": "Tesla",
+            "model": "Model 3",
+            "price": 50000,
+            "electric": 1,
+        },
+    )
+    insert(
+        db_connection_with_tables,
+        "car",
+        {
+            "make": "Ford",
+            "model": "Focus",
+            "price": 30000,
+            "electric": 0,
+        },
+    )
     return db_connection_with_tables
 
 

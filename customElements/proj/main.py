@@ -29,8 +29,8 @@ DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-class CsrfException(Exception):
-    ...
+
+class CsrfException(Exception): ...
 
 
 @app.get("/getCsrfToken")
@@ -38,27 +38,24 @@ async def get_csrf_token(response: Response):
     token = secrets.token_urlsafe(32)
     response.delete_cookie(key="csrftoken")
     response.set_cookie(key="csrftoken", value=token, samesite="lax")
-    return {'type': 'ok'}
+    return {"type": "ok"}
 
 
 @app.exception_handler(CsrfException)
-async def csrf_exception_handler(
-    request: Request, exc: CsrfException
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=403, content={"message": "csrf token mismatch"}
-    )
+async def csrf_exception_handler(request: Request, exc: CsrfException) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"message": "csrf token mismatch"})
 
 
 async def check_csrf_token(
-        token_header: Annotated[str | None, Header(alias="csrftoken")] = None,
-        token_cookie: Annotated[str | None, Cookie(alias="csrftoken")] = None,
-    ):
+    token_header: Annotated[str | None, Header(alias="csrftoken")] = None,
+    token_cookie: Annotated[str | None, Cookie(alias="csrftoken")] = None,
+):
     if token_header is None or token_cookie is None:
         raise CsrfException()
 
     if not hmac.compare_digest(token_header.encode(), token_cookie.encode()):
         raise CsrfException()
+
 
 CheckCsrfToken = Annotated[None, Depends(check_csrf_token)]
 
@@ -100,7 +97,7 @@ class ScreenCls(ABC):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]: ...
 
     def make_condition(self, params: dict[str, Any]) -> list[tuple[str, Any]]:
-        options = { v["search_form_cd"]: v for v in self.getSearchForm() }
+        options = {v["search_form_cd"]: v for v in self.getSearchForm()}
         queries = []
         new_params = {}
         for key, value in params.items():
@@ -287,31 +284,25 @@ Screen = Annotated[ScreenCls, Depends(get_screen)]
 
 @app.post("/search")
 async def search(
-        screen: Screen,
-        params: dict[str, Any],
-        _:CheckCsrfToken
+    screen: Screen, params: dict[str, Any], _: CheckCsrfToken
 ) -> list[dict[str, Any]]:
     return screen.search(params["params"])
 
 
 @app.post("/register")
 async def register(
-        dbConnection: DbConnection, screen: Screen, update: Register, _:CheckCsrfToken
+    dbConnection: DbConnection, screen: Screen, update: Register, _: CheckCsrfToken
 ) -> None:
     screen.update(update)
 
 
 @app.get("/getClass")
-async def _getClass(
-    code: str, dbConnection: DbConnection
-) -> list[dict[str, Any]]:
+async def _getClass(code: str, dbConnection: DbConnection) -> list[dict[str, Any]]:
     return getClass(dbConnection, code)
 
 
 @app.get("/getColumns")
-async def getColumns(
-    screen: Screen, dbConnection: DbConnection
-) -> dict[str, Any]:
+async def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, Any]:
     columnOptions = screen.getColumnOptions()
     for col in columnOptions:
         if col["type"] == "dropdown":
@@ -327,6 +318,8 @@ async def getSearchForms(screen: Screen) -> list[dict[str, Any]]:
     searchForms = screen.getSearchForm()
     return searchForms
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="127.0.0.1", port=8000)
