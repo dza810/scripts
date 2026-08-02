@@ -7,6 +7,8 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+import contextlib
+import functools
 
 
 def dict_factory(cursor, row):
@@ -14,23 +16,24 @@ def dict_factory(cursor, row):
     return {key: value for key, value in zip(fields, row)}
 
 
+
 """
 async なしの場合 fastapi が別スレッドで動かしてしまう。
 => handler メソッドで async にできるようにここにもつける
 """
 async def get_connection(dbname="data.db"):
-    print(dbname)
-    with sqlite3.connect(dbname) as con:
-        con.row_factory = dict_factory
-        con.autocommit = False
-        yield con
+    with contextlib.closing(sqlite3.connect(dbname)) as con:
+        with con:
+            con.row_factory = dict_factory
+            con.autocommit = False
+            yield con
 
 def get_connection_sync(dbname="data.db"):
-    print(dbname)
-    with sqlite3.connect(dbname) as con:
-        con.row_factory = dict_factory
-        con.autocommit = False
-        yield con
+    with contextlib.closing(sqlite3.connect(dbname)) as con:
+        with con:
+            con.row_factory = dict_factory
+            con.autocommit = False
+            yield con
 
 DbConnection = Annotated[sqlite3.Connection, Depends(get_connection)]
 
@@ -105,6 +108,17 @@ def update(con, table_name, data: dict, where: dict) -> sqlite3.Cursor | None:
     logger.debug('sql=', sql, 'params=', params)
     return con.execute(sql, params)
 
+def delete(con, table_name, where: dict) -> sqlite3.Cursor | None:
+    conditions = [makeEqCondition(k, v) for k, v in where.items()]
+    sql = f"""
+    DELETE FROM {table_name}
+    WHERE
+      {" AND ".join(v[0] for v in conditions)}
+    """
+    params = [v[1] for v in conditions if v[1] is not None]
+    logger.debug('sql=', sql, 'params=', params)
+    return con.execute(sql, params)
+
 
 def getClass(con, class_cd) -> list[dict[str, Any]]:
     sql = """
@@ -153,7 +167,7 @@ class ScreenCls(ABC):
                 for word in value.split(" "):
                     queries.append((f"`{column_cd}` like ('%' || ? || '%')", handleSqlValue(word)))
             case _:
-                print('skip', option)
+                logger.warning('skip', option)
         return queries
 
     def make_condition(self, params) -> list[tuple[str, Any]]:
@@ -167,7 +181,7 @@ class ScreenCls(ABC):
         return queries
 
     def run_search(self, table_name: str, order_by: list[str], params: dict[str, Any]):
-        print(table_name, order_by, params)
+        logger.debug(table_name, order_by, params)
         conditions = self.make_condition(params)
         sql = f"""
             SELECT
@@ -177,29 +191,36 @@ class ScreenCls(ABC):
             {"" if len(conditions) == 0 else f"WHERE {' AND '.join(v[0] for v in conditions)}"}
             ORDER BY {", ".join(order_by)}
         """
-        print(sql)
+        logger.debug(sql)
         paramsSql = [v[1] for v in conditions]
-        print(paramsSql)
+        logger.debug(paramsSql)
         return self.con.execute(sql, paramsSql).fetchall()
 
     def _search(self, params: dict[str, Any], table_name, order_by):
         return self.run_search(table_name, order_by, params)
 
     def run_insert(self, table_name, data):
-        print("insert", table_name, data)
+        logger.debug("insert", table_name, data)
         self._check_column_key(data.keys())
         return insert(self.con, table_name, data)
 
     def run_update(self, table_name, data, where):
-        print("update", table_name, data)
+        logger.debug("update", table_name, data)
         self._check_column_key(data.keys())
         return update(self.con, table_name, data, where)
+
+    def run_delete(self, table_name, where):
+        logger.debug("delete", table_name)
+        self._check_column_key(where.keys())
+        return delete(self.con, table_name, where)
 
     def _update(self, table_name, update):
         for ins_row in update.insertList:
             self.run_insert(table_name, ins_row)
+
         for del_id in update.deleteList:
-            self.run_insert(table_name, {f"{table_name}_id": del_id})
+            self.run_delete(table_name, {f"{table_name}_id": del_id})
+
         for upd_row in update.updateList:
             self.run_update(
                 table_name,
@@ -355,7 +376,7 @@ async def search(screen: Screen, params: dict[str, Any]) -> list[dict[str, Any]]
 
 
 @app.post("/register")
-async def register(screen: Screen, update: Register):
+async def register(dbConnection: DbConnection, screen: Screen, update: Register):
     screen.update(update)
 
 
@@ -369,7 +390,7 @@ async def getColumns(screen: Screen, dbConnection: DbConnection):
     columnOptions = screen.getColumnOptions()
     for col in columnOptions:
         if col["type"] == "dropdown":
-            print("_getClass")
+            logger.debug("getColumns")
             col["classes"] = getClass(dbConnection, col["dropdown_class_cd"])
 
     rowStyles = screen.getRowStyle()
