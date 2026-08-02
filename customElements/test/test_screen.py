@@ -1,6 +1,9 @@
+import sqlite3
+from typing import Any, cast
+
 import pytest
 
-from proj.db import insert, makeConditionQuery
+from proj.db import ConditionCode, insert, makeConditionQuery
 from proj.main import (
     CarList,
     ClassDtlMaster,
@@ -10,6 +13,7 @@ from proj.main import (
     InvalidScreenException,
     Register,
     RowStyleMaster,
+    ScreenCls,
     ScreenMaster,
     SearchFormMaster,
     get_screen,
@@ -20,7 +24,9 @@ from proj.main import (
     ("screen","screen_master"),
     ("column","column_master"),
 ])
-def test_screenCls_search_zero(db_connection_with_tables, screenCd, table):
+def test_screenCls_search_zero(
+    db_connection_with_tables: sqlite3.Connection, screenCd: str, table: str
+) -> None:
     con = db_connection_with_tables
     con.execute(f"delete from {table}")
     con.commit()
@@ -28,13 +34,17 @@ def test_screenCls_search_zero(db_connection_with_tables, screenCd, table):
     assert screen.search({}) == []
 
 
-def test_screenCls_search_one_by_id(db_connection_with_tables):
+def test_screenCls_search_one_by_id(
+    db_connection_with_tables: sqlite3.Connection,
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("screen_master", con)
     assert len(screen.search({'screen_cd': "screen_master"})) == 1
 
 
-def test_screenCls_search_invalid_key(db_connection_with_tables):
+def test_screenCls_search_invalid_key(
+    db_connection_with_tables: sqlite3.Connection,
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("screen_master", con)
     with pytest.raises(InvalidKeyException):
@@ -56,27 +66,32 @@ def test_screenCls_search_invalid_key(db_connection_with_tables):
     ]),
     ("unknown_condition", 15, []),
 ])
-def test_make_condition_query(condition_cd, value, expected):
-    assert makeConditionQuery("price", condition_cd, value) == expected
+def test_make_condition_query(
+    condition_cd: str, value: Any, expected: list[tuple[str, Any]]
+) -> None:
+    assert (
+        makeConditionQuery("price", cast(ConditionCode, condition_cd), value)
+        == expected
+    )
 
 
-def test_make_condition(db_connection_with_tables):
+def test_make_condition(db_connection_with_tables: sqlite3.Connection) -> None:
     screen = get_screen("car_list", db_connection_with_tables)
     assert screen.make_condition({"model": "Focus"}) == [("`model` = ?", "Focus")]
 
 
-def test_make_condition_multiple(db_connection_with_tables):
+def test_make_condition_multiple(db_connection_with_tables: sqlite3.Connection) -> None:
     screen = get_screen("car_list", db_connection_with_tables)
     assert screen.make_condition({"model": "Focus", "make": "cdFord"}) == [("`model` = ?", "Focus"), ("`make` = ?", "cdFord")]
 
 
-def test_make_condition_invalid_key(db_connection_with_tables):
+def test_make_condition_invalid_key(db_connection_with_tables: sqlite3.Connection) -> None:
     screen = get_screen("car_list", db_connection_with_tables)
     with pytest.raises(InvalidKeyException):
         screen.make_condition({"bogus_key": 1})
 
 
-def test_run_search_with_condition(db_connection_with_tables):
+def test_run_search_with_condition(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     insert(con, "car", {"make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1})
     insert(con, "car", {"make": "Ford", "model": "Focus", "price": 30000, "electric": 0})
@@ -87,21 +102,21 @@ def test_run_search_with_condition(db_connection_with_tables):
     assert result[0]["make"] == "Ford"
 
 
-def test_run_insert_invalid_key(db_connection_with_tables):
+def test_run_insert_invalid_key(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
         screen.run_insert("car", {"bogus_key": 1})
 
 
-def test_run_update_invalid_key(db_connection_with_tables):
+def test_run_update_invalid_key(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
         screen.run_update("car", {"bogus_key": 1}, {"car_id": 1})
 
 
-def test_register_insert_and_update(db_connection_with_tables):
+def test_register_insert_and_update(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     screen.update(Register(
@@ -125,7 +140,7 @@ def test_register_insert_and_update(db_connection_with_tables):
     assert updated["price"] == 33333
 
 
-def test_register_invalid_insert_key(db_connection_with_tables):
+def test_register_invalid_insert_key(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
@@ -136,7 +151,7 @@ def test_register_invalid_insert_key(db_connection_with_tables):
         ))
 
 
-def test_register_delete(db_connection_with_tables):
+def test_register_delete(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     screen.update(Register(
@@ -161,7 +176,7 @@ def test_register_delete(db_connection_with_tables):
     assert remaining[0]["make"] == "Tesla"
 
 
-def test_getColumnOptions(db_connection_with_tables):
+def test_getColumnOptions(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     options = screen.getColumnOptions()
@@ -169,7 +184,7 @@ def test_getColumnOptions(db_connection_with_tables):
     assert options[0]["type"] == "dropdown"
 
 
-def test_getSearchForm(db_connection_with_tables):
+def test_getSearchForm(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     forms = screen.getSearchForm()
@@ -181,13 +196,13 @@ def test_getSearchForm(db_connection_with_tables):
     ]
 
 
-def test_getRowStyle_empty(db_connection_with_tables):
+def test_getRowStyle_empty(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     assert screen.getRowStyle() == []
 
 
-def test_getRowStyle(db_connection_with_tables):
+def test_getRowStyle(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("row_style_master", con)
     assert screen.getRowStyle() == [{"code": None, "style": None}]
@@ -202,13 +217,17 @@ def test_getRowStyle(db_connection_with_tables):
     ("search_form_master", SearchFormMaster),
     ("row_style_master", RowStyleMaster),
 ])
-def test_get_screen(db_connection_with_tables, screen_cd, expected_cls):
+def test_get_screen(
+    db_connection_with_tables: sqlite3.Connection,
+    screen_cd: str,
+    expected_cls: type[ScreenCls],
+) -> None:
     con = db_connection_with_tables
     screen = get_screen(screen_cd, con)
     assert isinstance(screen, expected_cls)
 
 
-def test_get_screen_invalid(db_connection_with_tables):
+def test_get_screen_invalid(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     with pytest.raises(InvalidScreenException):
         get_screen("no_such_screen", con)
@@ -247,7 +266,9 @@ SEARCH_INJECTION_VALUES = [
 
 
 @pytest.mark.parametrize("payload", SEARCH_INJECTION_VALUES)
-def test_search_injection_values_safe(insert_cars, payload):
+def test_search_injection_values_safe(
+    insert_cars: sqlite3.Connection, payload: str
+) -> None:
     con = insert_cars
     screen = get_screen("car_list", con)
     result = screen.search({"model": payload})
@@ -268,7 +289,9 @@ SEARCH_INJECTION_KEYS = [
 
 
 @pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
-def test_search_injection_key_rejected(db_connection_with_tables, key):
+def test_search_injection_key_rejected(
+    db_connection_with_tables: sqlite3.Connection, key: str
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
@@ -278,7 +301,9 @@ def test_search_injection_key_rejected(db_connection_with_tables, key):
 
 
 @pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
-def test_register_insert_injection_column_key_rejected(db_connection_with_tables, key):
+def test_register_insert_injection_column_key_rejected(
+    db_connection_with_tables: sqlite3.Connection, key: str
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
@@ -286,7 +311,9 @@ def test_register_insert_injection_column_key_rejected(db_connection_with_tables
 
 
 @pytest.mark.parametrize("key", SEARCH_INJECTION_KEYS)
-def test_register_update_injection_column_key_rejected(db_connection_with_tables, key):
+def test_register_update_injection_column_key_rejected(
+    db_connection_with_tables: sqlite3.Connection, key: str
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     with pytest.raises(InvalidKeyException):
@@ -298,20 +325,22 @@ def test_register_update_injection_column_key_rejected(db_connection_with_tables
     "car_list' OR '1'='1 --",
     "car_list UNION SELECT 1,2,3--",
 ])
-def test_get_screen_injection_rejected(db_connection_with_tables, screen_cd):
+def test_get_screen_injection_rejected(
+    db_connection_with_tables: sqlite3.Connection, screen_cd: str
+) -> None:
     con = db_connection_with_tables
     with pytest.raises(InvalidScreenException):
         get_screen(screen_cd, con)
 
 
-def test_search_union_injection_no_data_leak(insert_cars):
+def test_search_union_injection_no_data_leak(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     screen = get_screen("car_list", con)
     assert screen.search({"model": "' OR '1'='1"}) == []
     assert screen.search({"model": "x' UNION SELECT make, model, price, electric FROM car--"}) == []
 
 
-def test_select_injection_value(db_connection_with_tables):
+def test_select_injection_value(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     insert(con, "car", {"make": "Tesla", "model": "Model 3", "price": 100, "electric": 1})
     insert(con, "car", {"make": "Ford", "model": "Focus", "price": 200, "electric": 0})
@@ -323,7 +352,7 @@ def test_select_injection_value(db_connection_with_tables):
     assert result[0]["make"] == "Ford"
 
 
-def test_delete_injection_where_value_safe(insert_cars):
+def test_delete_injection_where_value_safe(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     screen = get_screen("car_list", con)
     screen.run_delete("car", {"car_id": "1 OR 1=1; DROP TABLE car;--"})
@@ -331,7 +360,7 @@ def test_delete_injection_where_value_safe(insert_cars):
     assert len(rows) == 2
 
 
-def test_register_update_injection_id_safe(insert_cars):
+def test_register_update_injection_id_safe(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     screen = get_screen("car_list", con)
     screen.update(Register(
@@ -343,7 +372,7 @@ def test_register_update_injection_id_safe(insert_cars):
     assert prices == [50000, 30000]
 
 
-def test_register_delete_injection_id_safe(insert_cars):
+def test_register_delete_injection_id_safe(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     screen = get_screen("car_list", con)
     screen.update(Register(
@@ -355,7 +384,7 @@ def test_register_delete_injection_id_safe(insert_cars):
     assert len(rows) == 2
 
 
-def test_second_order_injection_safe(db_connection_with_tables):
+def test_second_order_injection_safe(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     payload = "'; DROP TABLE car;--"
@@ -366,7 +395,9 @@ def test_second_order_injection_safe(db_connection_with_tables):
     assert len(con.execute("SELECT * FROM car").fetchall()) == 1
 
 
-def test_sql_truncation_injection_stored_as_is(db_connection_with_tables):
+def test_sql_truncation_injection_stored_as_is(
+    db_connection_with_tables: sqlite3.Connection,
+) -> None:
     con = db_connection_with_tables
     screen = get_screen("car_list", con)
     payload = "admin   '--"

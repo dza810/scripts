@@ -15,7 +15,7 @@ from proj.db import (
 )
 
 
-def test_dict_factory(db_connection):
+def test_dict_factory(db_connection: sqlite3.Connection) -> None:
     con = db_connection
     con.execute("""
         CREATE TABLE test_dict_factory(
@@ -51,7 +51,7 @@ def test_dict_factory(db_connection):
     assert result[1]["text2"] == "xyz"
 
 
-def test_handleSqlValue():
+def test_handleSqlValue() -> None:
     tests = [
         { 'i': 1, 'o': '1'},
         { 'i': 1.2, 'o': '1.2'},
@@ -65,19 +65,19 @@ def test_handleSqlValue():
         assert handleSqlValue(i) == o
 
 
-def test_quote_ident():
+def test_quote_ident() -> None:
     assert quote_ident("price") == "`price`"
     assert quote_ident("make` FROM car --") == "`make`` FROM car --`"
     assert quote_ident("a``b") == "`a````b`"
 
 
-def test_make_eq_condition_backtick_escaped():
+def test_make_eq_condition_backtick_escaped() -> None:
     cond, param = makeEqCondition("make` FROM car --", "x")
     assert cond == "`make`` FROM car --` = ?"
     assert param == "x"
 
 
-def test_insert(db_connection):
+def test_insert(db_connection: sqlite3.Connection) -> None:
     con = db_connection
     data = {
         "uk_num1": 1,
@@ -93,7 +93,7 @@ def test_insert(db_connection):
     assert result[0] == data | { 'test_id': rowid }
 
 
-def test_update(db_connection):
+def test_update(db_connection: sqlite3.Connection) -> None:
     test_id = 1
     insert_data = [
         {
@@ -124,15 +124,15 @@ def test_update(db_connection):
     assert result[1] == insert_data[1] | {'test_id': 2}
 
 
-def test_insert_empty_data(db_connection):
+def test_insert_empty_data(db_connection: sqlite3.Connection) -> None:
     assert insert(db_connection, "test", {}) is None
 
 
-def test_update_empty_data(db_connection):
+def test_update_empty_data(db_connection: sqlite3.Connection) -> None:
     assert update(db_connection, "test", {}, {"test_id": 1}) is None
 
 
-def test_insert_injection_value(db_connection):
+def test_insert_injection_value(db_connection: sqlite3.Connection) -> None:
     data = {
         "uk_num1": 1,
         "uk_text1": "a",
@@ -151,7 +151,7 @@ def test_insert_injection_value(db_connection):
     assert result[0]["text2"] == "'); DROP TABLE test; --"
 
 
-def test_update_injection_value(db_connection):
+def test_update_injection_value(db_connection: sqlite3.Connection) -> None:
     insert_data = {
         "test_id": 1,
         "uk_num1": 1,
@@ -171,7 +171,7 @@ def test_update_injection_value(db_connection):
     assert result[0]["text2"] == "'); DROP TABLE test; --"
 
 
-def test_delete_injection_value(db_connection):
+def test_delete_injection_value(db_connection: sqlite3.Connection) -> None:
     insert(db_connection, "test", {
         "test_id": 1,
         "uk_num1": 1,
@@ -191,7 +191,7 @@ def test_delete_injection_value(db_connection):
     assert len(result) == 2
 
 
-def test_getClass(db_connection_with_tables):
+def test_getClass(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     cur = insert(con, "class_master", {
         "class_cd": 'testclass',
@@ -230,7 +230,7 @@ def test_getClass(db_connection_with_tables):
     ]
 
 
-def test_getClass_injection_value(db_connection_with_tables):
+def test_getClass_injection_value(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     cur = insert(con, "class_master", {
         "class_cd": "testclass",
@@ -253,13 +253,15 @@ def test_getClass_injection_value(db_connection_with_tables):
     "' AND 1=1--",
     "testclass' --",
 ])
-def test_getClass_injection_values_safe(db_connection_with_tables, payload):
+def test_getClass_injection_values_safe(
+    db_connection_with_tables: sqlite3.Connection, payload: str
+) -> None:
     con = db_connection_with_tables
     insert(con, "class_master", {"class_cd": "testclass", "class_name": "テスト区分"})
     assert getClass(con, payload) == []
 
 
-def test_select_table_name_injection_escaped(insert_cars):
+def test_select_table_name_injection_escaped(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     with pytest.raises(sqlite3.OperationalError):
         select(con, "car WHERE make='Tesla'", ["make"], [])
@@ -267,7 +269,7 @@ def test_select_table_name_injection_escaped(insert_cars):
     assert len(rows) == 2
 
 
-def test_select_order_by_injection_escaped(insert_cars):
+def test_select_order_by_injection_escaped(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     with pytest.raises(sqlite3.OperationalError):
         select(con, "car", ["price DESC"], [])
@@ -275,7 +277,7 @@ def test_select_order_by_injection_escaped(insert_cars):
         select(con, "car", ["price; DROP TABLE car;--"], [])
 
 
-def test_insert_column_name_injection_escaped(db_connection):
+def test_insert_column_name_injection_escaped(db_connection: sqlite3.Connection) -> None:
     con = db_connection
     data = {
         "uk_text1`: 1, text2 = 'x' --": 1,
@@ -289,7 +291,7 @@ def test_insert_column_name_injection_escaped(db_connection):
     assert len(con.execute("SELECT * FROM test").fetchall()) == 1
 
 
-def test_update_set_column_injection_escaped(insert_cars):
+def test_update_set_column_injection_escaped(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     with pytest.raises(sqlite3.OperationalError):
         update(con, "car", {"make = 'Hacked' WHERE 1=1 --": "x"}, {"car_id": 1})
@@ -297,7 +299,7 @@ def test_update_set_column_injection_escaped(insert_cars):
     assert [r["make"] for r in rows] == ["Tesla", "Ford"]
 
 
-def test_update_where_column_injection_escaped(insert_cars):
+def test_update_where_column_injection_escaped(insert_cars: sqlite3.Connection) -> None:
     con = insert_cars
     with pytest.raises(sqlite3.OperationalError):
         update(con, "car", {"price": 1}, {"car_id` = 1 --": 1})

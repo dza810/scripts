@@ -2,7 +2,9 @@ import sqlite3
 from typing import Any
 
 
-def dict_factory(cursor, row):
+def dict_factory(
+    cursor: sqlite3.Cursor, row: tuple[Any, ...]
+) -> dict[str, Any]:
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
@@ -25,15 +27,15 @@ class Column:
 
 
 def column(
-    code,
-    type_,
+    code: str,
+    type_: str,
     *,
-    data_type=None,
-    in_uniq=False,
-    not_null=False,
-    default=None,
-    dropdown_class_cd=None,
-):
+    data_type: str | None = None,
+    in_uniq: bool = False,
+    not_null: bool = False,
+    default: Any = None,
+    dropdown_class_cd: str | None = None,
+) -> Column:
     col = Column()
     col.code = code
 
@@ -63,7 +65,7 @@ class Table:
     cols: list[Column]
 
 
-def table(name, cols):
+def table(name: str, cols: list[Column]) -> Table:
     t = Table()
     t.name = name
     t.cols = cols
@@ -166,7 +168,7 @@ car_table = table(
 )
 
 
-def create_table_sql(table):
+def create_table_sql(table: Table) -> str:
     table_name = table.name
     cols = table.cols
     cols_sql = ",\n  ".join(
@@ -195,7 +197,9 @@ def create_table_sql(table):
     return sql
 
 
-def _make_insert_statement(con, table_name, data):
+def _make_insert_statement(
+    con: sqlite3.Connection, table_name: str, data: dict[str, Any]
+) -> str:
     return f"""
     INSERT INTO {table_name} (
       {",\n  ".join(k for k in data)}
@@ -205,13 +209,20 @@ def _make_insert_statement(con, table_name, data):
     """
 
 
-def insert(con, table_name, data: dict):
+def insert(
+    con: sqlite3.Connection, table_name: str, data: dict[str, Any]
+) -> sqlite3.Cursor:
     sql = _make_insert_statement(con, table_name, data)
     print(sql)
     return con.execute(sql, data)
 
 
-def setup_table_util(con, table, screen_cd, screen_name):
+def setup_table_util(
+    con: sqlite3.Connection,
+    table: Table,
+    screen_cd: str,
+    screen_name: str,
+) -> None:
     screen_id = insert(
         con,
         screen_table.name,
@@ -246,12 +257,14 @@ def setup_table_util(con, table, screen_cd, screen_name):
         )
 
 
-def make_table(con, table, screen_cd, screen_name):
+def make_table(
+    con: sqlite3.Connection, table: Table, screen_cd: str, screen_name: str
+) -> None:
     con.execute(create_table_sql(table))
     setup_table_util(con, table, screen_cd, screen_name)
 
 
-def setup_screen_column(con):
+def setup_screen_column(con: sqlite3.Connection) -> None:
     con.execute(create_table_sql(screen_table))
     con.execute(create_table_sql(column_table))
     con.execute(create_table_sql(search_form_table))
@@ -261,7 +274,7 @@ def setup_screen_column(con):
     setup_table_util(con, search_form_table, "search_form_master", "検索条件管理")
 
 
-def setup_class_tables(con):
+def setup_class_tables(con: sqlite3.Connection) -> None:
     make_table(con, class_table, "class_master", "区分値管理")
     make_table(con, class_dtl_table, "class_dtl_master", "区分値明細管理")
 
@@ -276,14 +289,14 @@ def setup_class_tables(con):
         )
 
 
-def get_screen_id(con, screen_cd):
+def get_screen_id(con: sqlite3.Connection, screen_cd: str) -> Any:
     screen_id = con.execute(
         "SELECT screen_id FROM screen WHERE screen_cd = ?", [screen_cd]
     ).fetchone()["screen_id"]
     return screen_id
 
 
-def setup_row_style(con):
+def setup_row_style(con: sqlite3.Connection) -> None:
     table = row_style_table
     screen_cd = "row_style_master"
 
@@ -296,7 +309,7 @@ def setup_row_style(con):
     )
 
 
-def setup_search_form_condition(con):
+def setup_search_form_condition(con: sqlite3.Connection) -> None:
     table = search_form_condition_table
     screen_cd = "search_form_condition"
 

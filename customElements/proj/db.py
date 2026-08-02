@@ -1,5 +1,6 @@
 import contextlib
 import sqlite3
+from collections.abc import AsyncIterator, Iterator
 from typing import Any, Literal
 
 from loguru import logger
@@ -13,7 +14,9 @@ ConditionCode = Literal[
 ]
 
 
-def dict_factory(cursor, row):
+def dict_factory(
+    cursor: sqlite3.Cursor, row: tuple[Any, ...]
+) -> dict[str, Any]:
     fields = [column[0] for column in cursor.description]
     return {key: value for key, value in zip(fields, row)}
 
@@ -22,20 +25,25 @@ def dict_factory(cursor, row):
 async なしの場合 fastapi が別スレッドで動かしてしまう。
 => handler メソッドで async にできるようにここにもつける
 """
-async def get_connection(dbname="data.db"):
+async def get_connection(
+    dbname: str = "data.db",
+) -> AsyncIterator[sqlite3.Connection]:
     with contextlib.closing(sqlite3.connect(dbname)) as con, con:
         con.row_factory = dict_factory
         con.autocommit = False
         yield con
 
-def get_connection_sync(dbname="data.db"):
+
+def get_connection_sync(
+    dbname: str = "data.db",
+) -> Iterator[sqlite3.Connection]:
     with contextlib.closing(sqlite3.connect(dbname)) as con, con:
         con.row_factory = dict_factory
         con.autocommit = False
         yield con
 
 
-def handleSqlValue(v) -> str:
+def handleSqlValue(v: Any) -> str:
     if v is None:
         return "NULL"
     if v is True:
@@ -49,13 +57,17 @@ def quote_ident(name: str) -> str:
     return f"`{name.replace('`', '``')}`"
 
 
-def makeEqCondition(k, v) -> tuple[str, Any]:
+def makeEqCondition(k: str, v: Any) -> tuple[str, Any]:
     if v is None:
         return f"{quote_ident(k)} is NULL", None
     else:
         return f"{quote_ident(k)} = ?", handleSqlValue(v)
 
-def insert(con, table_name, data: dict) -> sqlite3.Cursor | None:
+def insert(
+    con: sqlite3.Connection,
+    table_name: str,
+    data: dict[str, Any],
+) -> sqlite3.Cursor | None:
     if len(data) == 0:
         return None
     sql = f"""
@@ -69,7 +81,12 @@ def insert(con, table_name, data: dict) -> sqlite3.Cursor | None:
     return con.execute(sql, [handleSqlValue(v) for v in data.values()])
 
 
-def update(con, table_name, data: dict, where: dict) -> sqlite3.Cursor | None:
+def update(
+    con: sqlite3.Connection,
+    table_name: str,
+    data: dict[str, Any],
+    where: dict[str, Any],
+) -> sqlite3.Cursor | None:
     if len(data) == 0:
         return None
     conditions = [makeEqCondition(k, v) for k, v in where.items()]
@@ -84,7 +101,11 @@ def update(con, table_name, data: dict, where: dict) -> sqlite3.Cursor | None:
     logger.debug('sql=', sql, 'params=', params)
     return con.execute(sql, params)
 
-def delete(con, table_name, where: dict) -> sqlite3.Cursor | None:
+def delete(
+    con: sqlite3.Connection,
+    table_name: str,
+    where: dict[str, Any],
+) -> sqlite3.Cursor | None:
     conditions = [makeEqCondition(k, v) for k, v in where.items()]
     sql = f"""
     DELETE FROM {quote_ident(table_name)}
@@ -97,7 +118,10 @@ def delete(con, table_name, where: dict) -> sqlite3.Cursor | None:
 
 
 def select(
-    con, table_name: str, order_by: list[str], conditions: list[tuple[str, Any]]
+    con: sqlite3.Connection,
+    table_name: str,
+    order_by: list[str],
+    conditions: list[tuple[str, Any]],
 ) -> list[dict[str, Any]]:
     sql = f"""
         SELECT
@@ -112,7 +136,9 @@ def select(
     return con.execute(sql, paramsSql).fetchall()
 
 
-def makeConditionQuery(column, condition: ConditionCode, value) -> list[tuple[str, Any]]:
+def makeConditionQuery(
+    column: str, condition: ConditionCode, value: Any
+) -> list[tuple[str, Any]]:
     queries = []
     match condition:
         case "equal":
@@ -136,7 +162,9 @@ def makeConditionQuery(column, condition: ConditionCode, value) -> list[tuple[st
     return queries
 
 
-def getClass(con, class_cd) -> list[dict[str, Any]]:
+def getClass(
+    con: sqlite3.Connection, class_cd: str
+) -> list[dict[str, Any]]:
     sql = """
       SELECT
         class_dtl_cd as value,
@@ -151,7 +179,9 @@ def getClass(con, class_cd) -> list[dict[str, Any]]:
     return con.execute(sql, params).fetchall()
 
 
-def getRowStyle(con, screen_cd) -> list[dict[str, Any]]:
+def getRowStyle(
+    con: sqlite3.Connection, screen_cd: str
+) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT
@@ -166,7 +196,9 @@ def getRowStyle(con, screen_cd) -> list[dict[str, Any]]:
     ).fetchall()
 
 
-def getColumnOptions(con, screen_cd) -> list[dict[str, Any]]:
+def getColumnOptions(
+    con: sqlite3.Connection, screen_cd: str
+) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT *
@@ -179,7 +211,9 @@ def getColumnOptions(con, screen_cd) -> list[dict[str, Any]]:
     ).fetchall()
 
 
-def getSearchForm(con, screen_cd) -> list[dict[str, Any]]:
+def getSearchForm(
+    con: sqlite3.Connection, screen_cd: str
+) -> list[dict[str, Any]]:
     return con.execute(
         """
         SELECT
