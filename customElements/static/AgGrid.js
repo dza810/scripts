@@ -1,3 +1,5 @@
+import { runFetch } from "/static/index.js"
+
 export class AgGridDiv extends HTMLDivElement {
   #agGridOptions = undefined
   #originalData = []

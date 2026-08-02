@@ -1,4 +1,7 @@
-class SubmitButton extends HTMLButtonElement {
+import { FetchButton } from "/static/fetchButton.js"
+import { runFetch } from "/static/index.js"
+
+class SubmitButton extends FetchButton {
   constructor() {
     super()
   }

@@ -1,3 +1,5 @@
+import { setupLoadingDialog } from "/static/index.js"
+
 export class FetchButton extends HTMLButtonElement {
   constructor() {
     super();

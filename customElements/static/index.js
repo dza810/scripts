@@ -1,4 +1,4 @@
-function getOrCreate(id, tag, parent) {
+export function getOrCreate(id, tag, parent) {
   let elm = document.getElementById(id)
   if (!elm) {
     elm = document.createElement(tag)
@@ -12,7 +12,7 @@ function getOrCreate(id, tag, parent) {
   return elm;
 }
 
-const setupLoadingDialog = (message = null) => {
+export const setupLoadingDialog = (message = null) => {
   const loadingDialog = getOrCreate("loadingDialog", "dialog")
   loadingDialog.closedBy = "none";
   loadingDialog.innerHTML = "";
@@ -22,7 +22,7 @@ const setupLoadingDialog = (message = null) => {
   return loadingDialog;
 }
 
-async function runFetch(url, options) {
+export async function runFetch(url, options) {
   const urlObj = new URL(url, window.location.origin)
   urlObj.searchParams.append('screenCd', window.screenCd)
   const method = options?.method ?? "GET";
@@ -42,3 +42,4 @@ async function runFetch(url, options) {
 
 const url = new URL(document.location.href)
 window.screenCd = url.searchParams.get("screenCd")
+

@@ -1,3 +1,5 @@
+import { runFetch } from "/static/index.js"
+
 const searchFormInputClasses = new Map();
 
 const registerSearchFormInput = (clazz) => {
@@ -136,6 +138,7 @@ const searchFormInputFactory = (option) => {
 export class SearchForm extends HTMLFormElement {
   #searchFormOptions = undefined
   connectedCallback() {
+    this.setAttribute('is', 'search-form')
     this.#setupSearchForm()
   }
 
@@ -171,7 +174,7 @@ export class SearchForm extends HTMLFormElement {
     }
 
     const div = document.createElement("div")
-    const elm = document.createElement("button")
+    const elm = document.createElement("button", { is: "fetch-button" })
     elm.id = "searchButton"
     elm.textContent = "検索";
     elm.addEventListener('click', async (e) => {
@@ -212,7 +215,7 @@ export class SearchForm extends HTMLFormElement {
         }
       }
     }
-    this.#search(params).then(result => {
+    await this.#search(params).then(result => {
       if (this.#agGridElement) {
         try {
           this.#agGridElement.setRowData(result)

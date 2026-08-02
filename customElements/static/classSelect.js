@@ -1,3 +1,5 @@
+import { runFetch } from "/static/index.js"
+
 export class ClassSelect extends HTMLSelectElement {
   #abortController = undefined;
   #isConnected = false;
@@ -21,13 +23,13 @@ export class ClassSelect extends HTMLSelectElement {
   }
 
   connectedCallback() {
+    this.setAttribute('is', 'search-form')
     this.#isConnected = true;
     this.#loadOptions()
     this.disabled = true;
   }
 
   async #loadOptions() {
-    const code = this.code;
     if (!this.#isConnected) {
       return;
     }
