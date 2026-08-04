@@ -72,7 +72,7 @@ def set_search_form_condition(
         condition_id = condition["search_form_condition_id"]
     con.execute(
         """
-        UPDATE search_form SET condition_id = ?
+        UPDATE search_form SET search_form_condition_id = ?
         WHERE search_form_cd = ?
           AND screen_id = (SELECT screen_id FROM screen WHERE screen_cd = 'car_list')
         """,

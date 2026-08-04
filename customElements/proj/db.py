@@ -181,7 +181,7 @@ def getClass(con: sqlite3.Connection, class_cd: str) -> list[dict[str, Any]]:
         class_dtl_cd as value,
         class_dtl_name as name
       FROM class_dtl_master
-      JOIN class_master on class_master.class_master_id = class_dtl_master.class_id
+      JOIN class_master on class_master.class_master_id = class_dtl_master.class_master_id
       WHERE class_master.class_cd = :class_cd
       ORDER BY class_dtl_master.view_order
       """
@@ -232,7 +232,7 @@ def getSearchForm(con: sqlite3.Connection, screen_cd: str) -> list[dict[str, Any
             search_form_condition.condition_cd,
             search_form.view_order
         FROM search_form
-        JOIN search_form_condition ON search_form.condition_id = search_form_condition.search_form_condition_id
+        JOIN search_form_condition ON search_form.search_form_condition_id = search_form_condition.search_form_condition_id
         JOIN column ON search_form.column_id = column.column_id
         JOIN screen ON screen.screen_id = search_form.screen_id
         WHERE screen_cd = :screen_cd

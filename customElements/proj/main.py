@@ -275,7 +275,7 @@ class ClassMaster(ScreenCls):
 
 class ClassDtlMaster(ScreenCls):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        return self._search(params, "class_dtl_master", ["class_id", "class_dtl_cd"])
+        return self._search(params, "class_dtl_master", ["class_master_id", "class_dtl_cd"])
 
     def update(self, update: Register) -> None:
         self._update("class_dtl_master", update)

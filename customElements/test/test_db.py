@@ -141,22 +141,22 @@ def test_getClass(db_connection_with_tables: sqlite3.Connection) -> None:
         },
     )
     assert cur is not None
-    class_id = cur.lastrowid
+    class_master_id = cur.lastrowid
     data = [
         {
-            "class_id": class_id,
+            "class_master_id": class_master_id,
             "class_dtl_cd": "testclass_1",
             "class_dtl_name": "テストクラス1",
             "view_order": 10,
         },
         {
-            "class_id": class_id,
+            "class_master_id": class_master_id,
             "class_dtl_cd": "testclass_2",
             "class_dtl_name": "テストクラス2",
             "view_order": 9,
         },
         {
-            "class_id": class_id,
+            "class_master_id": class_master_id,
             "class_dtl_cd": "xxx",
             "class_dtl_name": "yyy",
             "view_order": 8,
@@ -190,7 +190,7 @@ def test_getClass_injection_value(
         con,
         "class_dtl_master",
         {
-            "class_id": cur.lastrowid,
+            "class_master_id": cur.lastrowid,
             "class_dtl_cd": "testclass_1",
             "class_dtl_name": "テストクラス1",
             "view_order": 10,

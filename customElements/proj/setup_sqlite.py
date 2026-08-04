@@ -14,6 +14,7 @@ def connect(dbname: str):
     con = sqlite3.connect(dbname)
     con.row_factory = dict_factory
     con.autocommit = False
+    con.execute("PRAGMA foreign_keys = true;");
     return con
 
 
@@ -120,7 +121,7 @@ search_form_table = table(
         column("search_form_cd", "text", in_uniq=True, not_null=True),
         column("search_form_name", "text", in_uniq=True, not_null=True),
         column("column_id", "number", not_null=True),
-        column("condition_id", "number", not_null=True),
+        column("search_form_condition_id", "number", not_null=True),
         column("view_order", "number", not_null=True),
         column("required", "checkbox", not_null=True, default=0),
     ],
@@ -149,7 +150,7 @@ class_table = table(
 class_dtl_table = table(
     "class_dtl_master",
     [
-        column("class_id", "number", in_uniq=True, not_null=True, editable=False),
+        column("class_master_id", "number", in_uniq=True, not_null=True, editable=False),
         column("class_dtl_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("class_dtl_name", "text", not_null=True),
         column("is_default", "checkbox", not_null=True, default=0),
@@ -274,7 +275,7 @@ def setup_table_util(
                 "search_form_cd": col.code,
                 "search_form_name": col.code,
                 "column_id": column_id,
-                "condition_id": 1,  # equal
+                "search_form_condition_id": 1,  # equal
                 "view_order": i,
             },
         )
@@ -308,7 +309,7 @@ def setup_class_tables(con: sqlite3.Connection) -> None:
         insert(
             con,
             class_dtl_table.name,
-            {"class_id": make_class_id, "class_dtl_cd": f"cd{v}", "class_dtl_name": v},
+            {"class_master_id": make_class_id, "class_dtl_cd": f"cd{v}", "class_dtl_name": v},
         )
 
 
