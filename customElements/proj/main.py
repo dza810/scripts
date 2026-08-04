@@ -1,4 +1,5 @@
 import hmac
+import contextlib
 import secrets
 import sqlite3
 from abc import ABC, abstractmethod
@@ -6,7 +7,7 @@ from collections.abc import Iterable
 from typing import Annotated, Any
 
 from fastapi import Cookie, Depends, FastAPI, Header, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pydantic import BaseModel
@@ -358,6 +359,23 @@ async def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, An
 async def getSearchForms(screen: Screen) -> list[dict[str, Any]]:
     searchForms = screen.getSearchForm()
     return searchForms
+
+
+async def make_menu(dbConnection: DbConnection):
+    with contextlib.closing(dbConnection.cursor()) as screen_cur:
+        screen_cur = dbConnection.cursor()
+        screen_cur.execute("""SELECT * FROM screen ORDER BY screen_cd""")
+        yield """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>"""
+        yield """<div><menu>"""
+        for screen in screen_cur:
+            yield f"""<ul><a href="/?screenCd={screen["screen_cd"]}">{screen["screen_name"]}</a></ul>"""
+        yield """</ul></div>"""
+        yield """</body>"""
+
+
+@app.get("/menu")
+async def menu(response: Response, dbConnection: DbConnection):
+    return StreamingResponse(make_menu(dbConnection), media_type="text/html")
 
 
 if __name__ == "__main__":
