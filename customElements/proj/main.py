@@ -34,7 +34,7 @@ class CsrfException(Exception): ...
 
 
 @app.get("/getCsrfToken")
-async def get_csrf_token(response: Response):
+def get_csrf_token(response: Response):
     token = secrets.token_urlsafe(32)
     response.delete_cookie(key="csrftoken")
     response.set_cookie(key="csrftoken", value=token, samesite="lax")
@@ -42,11 +42,11 @@ async def get_csrf_token(response: Response):
 
 
 @app.exception_handler(CsrfException)
-async def csrf_exception_handler(request: Request, exc: CsrfException) -> JSONResponse:
+def csrf_exception_handler(request: Request, exc: CsrfException) -> JSONResponse:
     return JSONResponse(status_code=403, content={"message": "csrf token mismatch"})
 
 
-async def check_csrf_token(
+def check_csrf_token(
     token_header: Annotated[str | None, Header(alias="csrftoken")] = None,
     token_cookie: Annotated[str | None, Cookie(alias="csrftoken")] = None,
 ):
@@ -72,23 +72,21 @@ class InvalidKeyException(Exception):
 
 
 @app.exception_handler(InvalidKeyException)
-async def invalid_key_exception(
-    request: Request, exc: InvalidKeyException
-) -> JSONResponse:
+def invalid_key_exception(request: Request, exc: InvalidKeyException) -> JSONResponse:
     return JSONResponse(
         status_code=418, content={"message": f"invalid key: {exc.name}"}
     )
 
 
 @app.exception_handler(ValueError)
-async def value_error(request: Request, exc: ValueError) -> JSONResponse:
+def value_error(request: Request, exc: ValueError) -> JSONResponse:
     return JSONResponse(
         status_code=418, content={"message": f"invalid key: {','.join(exc.args)}"}
     )
 
 
 @app.get("/")
-async def root() -> FileResponse:
+def root() -> FileResponse:
     return FileResponse("index.html")
 
 
@@ -267,7 +265,9 @@ class CarList(ScreenCls):
 
 class ClassMaster(ScreenCls):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        return self._search(params, "classification", ["screen_id", "classification_cd"])
+        return self._search(
+            params, "classification", ["screen_id", "classification_cd"]
+        )
 
     def update(self, update: Register) -> None:
         self._update("classification", update)
@@ -275,7 +275,9 @@ class ClassMaster(ScreenCls):
 
 class ClassDtlMaster(ScreenCls):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        return self._search(params, "class_dtl_master", ["classification_id", "class_dtl_cd"])
+        return self._search(
+            params, "class_dtl_master", ["classification_id", "class_dtl_cd"]
+        )
 
     def update(self, update: Register) -> None:
         self._update("class_dtl_master", update)
@@ -324,26 +326,26 @@ Screen = Annotated[ScreenCls, Depends(get_screen)]
 
 
 @app.post("/search")
-async def search(
+def search(
     screen: Screen, params: dict[str, Any], _: CheckCsrfToken
 ) -> list[dict[str, Any]]:
     return screen.search(params["params"])
 
 
 @app.post("/register")
-async def register(
+def register(
     dbConnection: DbConnection, screen: Screen, update: Register, _: CheckCsrfToken
 ) -> None:
     screen.update(update)
 
 
 @app.get("/getClass")
-async def _getClass(code: str, dbConnection: DbConnection) -> list[dict[str, Any]]:
+def _getClass(code: str, dbConnection: DbConnection) -> list[dict[str, Any]]:
     return getClass(dbConnection, code)
 
 
 @app.get("/getColumns")
-async def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, Any]:
+def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, Any]:
     columnOptions = screen.getColumnOptions()
     for col in columnOptions:
         if col["type"] == "dropdown":
@@ -355,12 +357,12 @@ async def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, An
 
 
 @app.get("/getSearchForms")
-async def getSearchForms(screen: Screen) -> list[dict[str, Any]]:
+def getSearchForms(screen: Screen) -> list[dict[str, Any]]:
     searchForms = screen.getSearchForm()
     return searchForms
 
 
-async def make_menu(dbConnection: DbConnection):
+def make_menu(dbConnection: DbConnection):
     with contextlib.closing(dbConnection.cursor()) as screen_cur:
         screen_cur = dbConnection.cursor()
         screen_cur.execute("""SELECT * FROM screen ORDER BY screen_cd""")
@@ -373,7 +375,7 @@ async def make_menu(dbConnection: DbConnection):
 
 
 @app.get("/menu")
-async def menu(response: Response, dbConnection: DbConnection):
+def menu(response: Response, dbConnection: DbConnection):
     return StreamingResponse(make_menu(dbConnection), media_type="text/html")
 
 

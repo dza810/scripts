@@ -1,6 +1,6 @@
 import contextlib
 import sqlite3
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from typing import Any, Literal
 
 from loguru import logger
@@ -25,17 +25,7 @@ async なしの場合 fastapi が別スレッドで動かしてしまう。
 """
 
 
-async def get_connection(
-    dbname: str = "data.db",
-) -> AsyncIterator[sqlite3.Connection]:
-    with contextlib.closing(sqlite3.connect(dbname)) as con, con:
-        con.row_factory = dict_factory
-        con.autocommit = False
-        con.execute("PRAGMA foreign_keys = true")
-        yield con
-
-
-def get_connection_sync(
+def get_connection(
     dbname: str = "data.db",
 ) -> Iterator[sqlite3.Connection]:
     with contextlib.closing(sqlite3.connect(dbname)) as con, con:

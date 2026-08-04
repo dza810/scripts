@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from proj import setup_sqlite
-from proj.db import dict_factory, get_connection_sync, insert
+from proj.db import dict_factory, get_connection, insert
 from proj.main import app, get_connection
 
 
@@ -32,7 +32,7 @@ plain_client: TestClient = TestClient(app)
 
 @pytest.fixture(scope="function")
 def db_connection() -> Iterator[sqlite3.Connection]:
-    for con in get_connection_sync(":memory:"):
+    for con in get_connection(":memory:"):
         con.execute("""
             CREATE TABLE test(
                 test_id integer PRIMARY KEY autoincrement,
