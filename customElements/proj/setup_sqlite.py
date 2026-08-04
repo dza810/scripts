@@ -1,5 +1,8 @@
 import sqlite3
-from typing import Any
+from typing import Any, Literal
+
+sqliteStrictAllowedTypes = Literal["INT", "INTEGER", "REAL", "TEXT", "BLOB", "ANY"]
+SQLITE_STRICT_ALLOWD_TYPES = ["INT", "INTEGER", "REAL", "TEXT", "BLOB", "ANY"]
 
 
 def dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -44,10 +47,8 @@ def column(
     if data_type is None:
         if type_ == "dropdown":
             col.data_type = "text"
-        elif type_ == "number":
+        elif type_ == "number" or type_ == "checkbox":
             col.data_type = "integer"
-        elif type_ == "checkbox":
-            col.data_type = "boolean"
         else:
             col.data_type = type_
     else:
@@ -177,30 +178,41 @@ car_table = table(
 def create_table_sql(table: Table) -> str:
     table_name = table.name
     cols = table.cols
-    cols_sql = ",\n  ".join(
-        [
-            " ".join(
-                v
-                for v in [
-                    f"`{col.code}`",
-                    col.data_type,
-                    "NOT NULL" if col.not_null else None,
-                    f"DEFAULT {"'" + col.default + "'" if isinstance(col.default, str) else col.default}"
-                    if col.default is not None
-                    else None,
-                ]
-                if v != "" and v is not None
-            )
-            for col in cols
-        ]
-    )
+    for col in table.cols:
+        assert col.data_type.upper() in SQLITE_STRICT_ALLOWD_TYPES, (
+            f"型が不正です。{table.name}.{col.code},{col.type_},{col.data_type}"
+        )
+
+    cols_sql = [
+        " ".join(
+            v
+            for v in [
+                f"`{col.code}`",
+                col.data_type,
+                "NOT NULL" if col.not_null else None,
+                f"DEFAULT {"'" + col.default + "'" if isinstance(col.default, str) else col.default}"
+                if col.default is not None
+                else None,
+            ]
+            if v != "" and v is not None
+        )
+        for col in cols
+    ]
+    foreign_keys = [
+        f"foreign key (`{col.code}`) references `{col.code[: -len('_id')]}({col.code})`"
+        for col in cols
+        if col.code.endswith("_id")
+    ]
     uniq_sql = ", ".join([f"`{col.code}`" for col in cols if col.in_uniq])
     sql = f"""
-      CREATE TABLE {table_name} (
-        `{table_name}_id` integer primary key autoincrement,
-        {cols_sql}
-        {"" if len(uniq_sql) == 0 else f", unique ({uniq_sql})"}
-      )"""
+      CREATE TABLE {table_name} ({
+        ",".join(
+            [f"`{table_name}_id` integer primary key autoincrement"]
+            + cols_sql
+            + [f"unique ({uniq_sql})"]
+            + foreign_keys
+        )
+    }) STRICT"""
     print(sql)
     return sql
 

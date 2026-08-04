@@ -1,9 +1,8 @@
-import hmac
 import contextlib
+import hmac
 import secrets
 import sqlite3
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from typing import Annotated, Any
 
 from fastapi import Cookie, Depends, FastAPI, Header, Request, Response
@@ -74,20 +73,18 @@ class InvalidKeyException(Exception):
 
 @app.exception_handler(InvalidKeyException)
 async def invalid_key_exception(
-    request: Request, exc: InvalidKeyException 
+    request: Request, exc: InvalidKeyException
 ) -> JSONResponse:
     return JSONResponse(
         status_code=418, content={"message": f"invalid key: {exc.name}"}
     )
 
-@app.exception_handler(ValueError)
-async def value_error(
-    request: Request, exc:  ValueError
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=418, content={"message": f"invalid key: {",".join(exc.args)}"}
-    )
 
+@app.exception_handler(ValueError)
+async def value_error(request: Request, exc: ValueError) -> JSONResponse:
+    return JSONResponse(
+        status_code=418, content={"message": f"invalid key: {','.join(exc.args)}"}
+    )
 
 
 @app.get("/")
@@ -205,9 +202,9 @@ class ScreenCls(ABC):
                 raise InvalidKeyException(key)
             if option.get("required") and (value is None or len(str(value)) == 0):
                 raise ValueError(f"{key} is required")
-            if max_length:=option.get("max_length"):
-                if max_length < len(str(value)):
-                    raise ValueError(f"{key}={value} is longer than {max_length}")
+            max_length = option.get("max_length")
+            if max_length is not None and max_length < len(str(value)):
+                raise ValueError(f"{key}={value} is longer than {max_length}")
             if option["type"] == "number":
                 if not isinstance(value, int) and value is not None:
                     raise ValueError(f"{key} must be a number")
@@ -230,12 +227,14 @@ class ScreenCls(ABC):
         return getRowStyle(self.con, self.screen_cd)
 
     _getColumnOptions = None
+
     def getColumnOptions(self) -> list[dict[str, Any]]:
         if self._getColumnOptions is None:
             self._getColumnOptions = getColumnOptions(self.con, self.screen_cd)
         return self._getColumnOptions
 
     _getSearchForm = None
+
     def getSearchForm(self) -> list[dict[str, Any]]:
         if self._getSearchForm is None:
             self._getSearchForm = getSearchForm(self.con, self.screen_cd)

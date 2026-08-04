@@ -31,6 +31,7 @@ async def get_connection(
     with contextlib.closing(sqlite3.connect(dbname)) as con, con:
         con.row_factory = dict_factory
         con.autocommit = False
+        con.execute("PRAGMA foreign_keys = true")
         yield con
 
 
@@ -40,6 +41,7 @@ def get_connection_sync(
     with contextlib.closing(sqlite3.connect(dbname)) as con, con:
         con.row_factory = dict_factory
         con.autocommit = False
+        con.execute("PRAGMA foreign_keys = true")
         yield con
 
 
