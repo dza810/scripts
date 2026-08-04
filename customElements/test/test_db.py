@@ -134,29 +134,29 @@ def test_getClass(db_connection_with_tables: sqlite3.Connection) -> None:
     con = db_connection_with_tables
     cur = insert(
         con,
-        "class_master",
+        "classification",
         {
-            "class_cd": "testclass",
-            "class_name": "テスト区分",
+            "classification_cd": "testclass",
+            "classification_name": "テスト区分",
         },
     )
     assert cur is not None
-    class_master_id = cur.lastrowid
+    classification_id = cur.lastrowid
     data = [
         {
-            "class_master_id": class_master_id,
+            "classification_id": classification_id,
             "class_dtl_cd": "testclass_1",
             "class_dtl_name": "テストクラス1",
             "view_order": 10,
         },
         {
-            "class_master_id": class_master_id,
+            "classification_id": classification_id,
             "class_dtl_cd": "testclass_2",
             "class_dtl_name": "テストクラス2",
             "view_order": 9,
         },
         {
-            "class_master_id": class_master_id,
+            "classification_id": classification_id,
             "class_dtl_cd": "xxx",
             "class_dtl_name": "yyy",
             "view_order": 8,
@@ -179,10 +179,10 @@ def test_getClass_injection_value(
     con = db_connection_with_tables
     cur = insert(
         con,
-        "class_master",
+        "classification",
         {
-            "class_cd": "testclass",
-            "class_name": "テスト区分",
+            "classification_cd": "testclass",
+            "classification_name": "テスト区分",
         },
     )
     assert cur is not None
@@ -190,7 +190,7 @@ def test_getClass_injection_value(
         con,
         "class_dtl_master",
         {
-            "class_master_id": cur.lastrowid,
+            "classification_id": cur.lastrowid,
             "class_dtl_cd": "testclass_1",
             "class_dtl_name": "テストクラス1",
             "view_order": 10,
@@ -213,7 +213,11 @@ def test_getClass_injection_values_safe(
     db_connection_with_tables: sqlite3.Connection, payload: str
 ) -> None:
     con = db_connection_with_tables
-    insert(con, "class_master", {"class_cd": "testclass", "class_name": "テスト区分"})
+    insert(
+        con,
+        "classification",
+        {"classification_cd": "testclass", "classification_name": "テスト区分"},
+    )
     assert getClass(con, payload) == []
 
 

@@ -267,15 +267,15 @@ class CarList(ScreenCls):
 
 class ClassMaster(ScreenCls):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        return self._search(params, "class_master", ["screen_id", "class_cd"])
+        return self._search(params, "classification", ["screen_id", "classification_cd"])
 
     def update(self, update: Register) -> None:
-        self._update("class_master", update)
+        self._update("classification", update)
 
 
 class ClassDtlMaster(ScreenCls):
     def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
-        return self._search(params, "class_dtl_master", ["class_master_id", "class_dtl_cd"])
+        return self._search(params, "class_dtl_master", ["classification_id", "class_dtl_cd"])
 
     def update(self, update: Register) -> None:
         self._update("class_dtl_master", update)
@@ -309,7 +309,7 @@ def get_screen(screenCd: str, con: DbConnection) -> ScreenCls:
         return ScreenMaster(con, screen_cd)
     if screen_cd == "car_list":
         return CarList(con, screen_cd)
-    if screen_cd == "class_master":
+    if screen_cd == "classification":
         return ClassMaster(con, screen_cd)
     if screen_cd == "class_dtl_master":
         return ClassDtlMaster(con, screen_cd)
@@ -348,7 +348,7 @@ async def getColumns(screen: Screen, dbConnection: DbConnection) -> dict[str, An
     for col in columnOptions:
         if col["type"] == "dropdown":
             logger.debug("getColumns")
-            col["classes"] = getClass(dbConnection, col["dropdown_class_cd"])
+            col["classes"] = getClass(dbConnection, col["dropdown_classification_cd"])
 
     rowStyles = screen.getRowStyle()
     return {"columnOptions": columnOptions, "rowStyles": rowStyles}

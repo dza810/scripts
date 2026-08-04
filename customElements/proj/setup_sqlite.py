@@ -14,7 +14,7 @@ def connect(dbname: str):
     con = sqlite3.connect(dbname)
     con.row_factory = dict_factory
     con.autocommit = False
-    con.execute("PRAGMA foreign_keys = true;");
+    con.execute("PRAGMA foreign_keys = true;")
     return con
 
 
@@ -26,7 +26,7 @@ class Column:
     not_null: bool
     default: Any
     editable: bool
-    dropdown_class_cd: str | None
+    dropdown_classification_cd: str | None
     max_length: int | None
 
 
@@ -38,7 +38,7 @@ def column(
     in_uniq: bool = False,
     not_null: bool = False,
     default: Any = None,
-    dropdown_class_cd: str | None = None,
+    dropdown_classification_cd: str | None = None,
     max_length: int | None = None,
     editable: bool = True,
 ) -> Column:
@@ -60,7 +60,7 @@ def column(
     col.in_uniq = in_uniq
     col.not_null = not_null
     col.default = default
-    col.dropdown_class_cd = dropdown_class_cd
+    col.dropdown_classification_cd = dropdown_classification_cd
     col.max_length = max_length
     col.editable = editable
     return col
@@ -100,7 +100,7 @@ column_table = table(
         column("cell_style_code_style", "text"),
         column("max_length", "number"),
         # dropdown
-        column("dropdown_class_cd", "text"),
+        column("dropdown_classification_cd", "text"),
         # auto_calc
         column("auto_calc_code", "text"),
     ],
@@ -140,17 +140,21 @@ row_style_table = table(
 )
 
 class_table = table(
-    "class_master",
+    "classification",
     [
-        column("class_cd", "text", in_uniq=True, not_null=True, editable=False),
-        column("class_name", "text", not_null=True),
+        column(
+            "classification_cd", "text", in_uniq=True, not_null=True, editable=False
+        ),
+        column("classification_name", "text", not_null=True),
     ],
 )
 
 class_dtl_table = table(
     "class_dtl_master",
     [
-        column("class_master_id", "number", in_uniq=True, not_null=True, editable=False),
+        column(
+            "classification_id", "number", in_uniq=True, not_null=True, editable=False
+        ),
         column("class_dtl_cd", "text", in_uniq=True, not_null=True, editable=False),
         column("class_dtl_name", "text", not_null=True),
         column("is_default", "checkbox", not_null=True, default=0),
@@ -167,7 +171,7 @@ car_table = table(
             data_type="text",
             in_uniq=True,
             not_null=True,
-            dropdown_class_cd="make",
+            dropdown_classification_cd="make",
         ),
         column("model", "text", in_uniq=True),
         column("price", "number"),
@@ -260,7 +264,7 @@ def setup_table_util(
                 "column_cd": col.code,
                 "column_name": col.code,
                 "type": col.type_,
-                "dropdown_class_cd": col.dropdown_class_cd,
+                "dropdown_classification_cd": col.dropdown_classification_cd,
                 "max_length": col.max_length,
                 "required": col.not_null,
                 "editable": col.editable,
@@ -299,17 +303,23 @@ def setup_screen_column(con: sqlite3.Connection) -> None:
 
 
 def setup_class_tables(con: sqlite3.Connection) -> None:
-    make_table(con, class_table, "class_master", "区分値管理")
+    make_table(con, class_table, "classification", "区分値管理")
     make_table(con, class_dtl_table, "class_dtl_master", "区分値明細管理")
 
     make_class_id = insert(
-        con, class_table.name, {"class_cd": "make", "class_name": "make"}
+        con,
+        class_table.name,
+        {"classification_cd": "make", "classification_name": "make"},
     ).lastrowid
     for v in ["Tesla", "Ford", "Toyota"]:
         insert(
             con,
             class_dtl_table.name,
-            {"class_master_id": make_class_id, "class_dtl_cd": f"cd{v}", "class_dtl_name": v},
+            {
+                "classification_id": make_class_id,
+                "class_dtl_cd": f"cd{v}",
+                "class_dtl_name": v,
+            },
         )
 
 

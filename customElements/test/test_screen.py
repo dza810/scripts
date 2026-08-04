@@ -278,7 +278,7 @@ def test_getRowStyle(db_connection_with_tables: sqlite3.Connection) -> None:
         ("screen_master", ScreenMaster),
         ("column_master", ColumnMaster),
         ("car_list", CarList),
-        ("class_master", ClassMaster),
+        ("classification", ClassMaster),
         ("class_dtl_master", ClassDtlMaster),
         ("search_form_master", SearchFormMaster),
         ("row_style_master", RowStyleMaster),

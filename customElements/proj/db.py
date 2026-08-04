@@ -175,17 +175,17 @@ def makeConditionQuery(
     return queries
 
 
-def getClass(con: sqlite3.Connection, class_cd: str) -> list[dict[str, Any]]:
+def getClass(con: sqlite3.Connection, classification_cd: str) -> list[dict[str, Any]]:
     sql = """
       SELECT
         class_dtl_cd as value,
         class_dtl_name as name
       FROM class_dtl_master
-      JOIN class_master on class_master.class_master_id = class_dtl_master.class_master_id
-      WHERE class_master.class_cd = :class_cd
+      JOIN classification on classification.classification_id = class_dtl_master.classification_id
+      WHERE classification.classification_cd = :classification_cd
       ORDER BY class_dtl_master.view_order
       """
-    params = {"class_cd": class_cd}
+    params = {"classification_cd": classification_cd}
     logger.debug("sql=", sql, "params=", params)
     return con.execute(sql, params).fetchall()
 
@@ -228,7 +228,7 @@ def getSearchForm(con: sqlite3.Connection, screen_cd: str) -> list[dict[str, Any
             column.column_name,
             column.type,
             search_form.required,
-            column.dropdown_class_cd,
+            column.dropdown_classification_cd,
             search_form_condition.condition_cd,
             search_form.view_order
         FROM search_form
