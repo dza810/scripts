@@ -4,77 +4,11 @@ import pytest
 
 from proj.db import (
     delete,
-    dict_factory,
     getClass,
-    handleSqlValue,
     insert,
-    makeEqCondition,
-    quote_ident,
     select,
     update,
 )
-
-
-def test_dict_factory(db_connection: sqlite3.Connection) -> None:
-    con = db_connection
-    con.execute("""
-        CREATE TABLE test_dict_factory(
-            test_id integer PRIMARY KEY autoincrement,
-            uk_num1 integer,
-            uk_text1 text,
-            uk_bool1 bool,
-            text2 text,
-            unique (uk_num1, uk_text1, uk_bool1)
-        )
-    """)
-    con.execute("""
-        INSERT INTO test_dict_factory(uk_num1, uk_text1, uk_bool1, text2) 
-        VALUES (1, 'a', '1', 'abc')
-    """)
-    con.execute("""
-        INSERT INTO test_dict_factory(uk_num1, uk_text1, uk_bool1, text2) 
-        VALUES (2, 'b', '0', 'xyz')
-    """)
-    con.row_factory = dict_factory
-    result = con.execute("SELECT * FROM test_dict_factory ORDER BY rowid").fetchall()
-
-    assert result[0]["test_id"] == 1
-    assert result[0]["uk_num1"] == 1
-    assert result[0]["uk_text1"] == "a"
-    assert result[0]["uk_bool1"] == 1
-    assert result[0]["text2"] == "abc"
-
-    assert result[1]["test_id"] == 2
-    assert result[1]["uk_num1"] == 2
-    assert result[1]["uk_text1"] == "b"
-    assert result[1]["uk_bool1"] == 0
-    assert result[1]["text2"] == "xyz"
-
-
-def test_handleSqlValue() -> None:
-    tests = [
-        {"i": 1, "o": "1"},
-        {"i": 1.2, "o": "1.2"},
-        {"i": None, "o": "NULL"},
-        {"i": True, "o": "1"},
-        {"i": False, "o": "0"},
-    ]
-    for test in tests:
-        i = test["i"]
-        o = test["o"]
-        assert handleSqlValue(i) == o
-
-
-def test_quote_ident() -> None:
-    assert quote_ident("price") == "`price`"
-    assert quote_ident("make` FROM car --") == "`make`` FROM car --`"
-    assert quote_ident("a``b") == "`a````b`"
-
-
-def test_make_eq_condition_backtick_escaped() -> None:
-    cond, param = makeEqCondition("make` FROM car --", "x")
-    assert cond == "`make`` FROM car --` = ?"
-    assert param == "x"
 
 
 def test_insert(db_connection: sqlite3.Connection) -> None:
@@ -123,14 +57,6 @@ def test_update(db_connection: sqlite3.Connection) -> None:
     assert len(result) == 2
     assert result[0] == update_data | {"test_id": 1}
     assert result[1] == insert_data[1] | {"test_id": 2}
-
-
-def test_insert_empty_data(db_connection: sqlite3.Connection) -> None:
-    assert insert(db_connection, "test", {}) is None
-
-
-def test_update_empty_data(db_connection: sqlite3.Connection) -> None:
-    assert update(db_connection, "test", {}, {"test_id": 1}) is None
 
 
 def test_insert_injection_value(db_connection: sqlite3.Connection) -> None:

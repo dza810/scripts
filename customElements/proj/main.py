@@ -155,8 +155,8 @@ class ScreenCls(ABC):
         self, table_name: str, data: dict[str, Any]
     ) -> sqlite3.Cursor | None:
         logger.debug("insert", table_name, data)
-        self._check_required(data)
         parsed_data = self.parse_data(data)
+        self._check_required(parsed_data)
         return insert(self.con, table_name, parsed_data)
 
     def run_update(

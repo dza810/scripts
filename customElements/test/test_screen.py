@@ -1,9 +1,9 @@
 import sqlite3
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from proj.db import ConditionCode, insert, makeConditionQuery
+from proj.db import insert
 from proj.main import (
     CarList,
     ClassDtlMaster,
@@ -54,52 +54,77 @@ def test_screenCls_search_invalid_key(
         screen.search({"xxx": "abc"})
 
 
+def set_search_form_condition(
+    con: sqlite3.Connection, column_cd: str, condition_cd: str
+) -> None:
+    condition = con.execute(
+        "SELECT search_form_condition_id FROM search_form_condition"
+        " WHERE condition_cd = ?",
+        [condition_cd],
+    ).fetchone()
+    if condition is None:
+        condition_id = con.execute(
+            "INSERT INTO search_form_condition (condition_cd, condition_name)"
+            " VALUES (?, ?)",
+            [condition_cd, condition_cd],
+        ).lastrowid
+    else:
+        condition_id = condition["search_form_condition_id"]
+    con.execute(
+        """
+        UPDATE search_form SET condition_id = ?
+        WHERE search_form_cd = ?
+          AND screen_id = (SELECT screen_id FROM screen WHERE screen_cd = 'car_list')
+        """,
+        [condition_id, column_cd],
+    )
+    con.commit()
+
+
 @pytest.mark.parametrize(
-    "condition_cd,value,expected",
+    "condition_cd,column_cd,search_params,expected_makes",
     [
-        ("equal", 15, [("`price` = ?", "15")]),
-        ("equal", None, [("`price` is NULL", None)]),
-        ("lesser_than_or_equal", 15, [("`price` <= ?", "15")]),
-        ("greater_than_or_equal", 15, [("? <= `price`", "15")]),
+        ("equal", "price", {"price": 30000}, ["Ford"]),
+        ("equal", "price", {"price": None}, ["Toyota"]),
+        ("lesser_than_or_equal", "price", {"price": 30000}, ["Ford"]),
+        ("greater_than_or_equal", "price", {"price": 50000}, ["Tesla"]),
         (
             "between",
-            {"from": 10, "to": 20},
-            [("? <= `price`", "10"), ("`price` <= ?", "20")],
+            "price",
+            {"price::from": 30000, "price::to": 50000},
+            ["Ford", "Tesla"],
         ),
-        ("between", {"from": 10}, [("? <= `price`", "10")]),
-        ("between", {"to": 20}, [("`price` <= ?", "20")]),
-        ("between", {}, []),
-        (
-            "contains",
-            "aa bb",
-            [
-                ("`price` like ('%' || ? || '%')", "aa"),
-                ("`price` like ('%' || ? || '%')", "bb"),
-            ],
-        ),
-        ("unknown_condition", 15, []),
+        ("between", "price", {"price::from": 30000}, ["Ford", "Tesla"]),
+        ("between", "price", {"price::to": 30000}, ["Ford"]),
+        ("contains", "model", {"model": "el"}, ["Tesla"]),
     ],
 )
-def test_make_condition_query(
-    condition_cd: str, value: Any, expected: list[tuple[str, Any]]
+def test_search_with_condition(
+    db_connection_with_tables: sqlite3.Connection,
+    condition_cd: str,
+    column_cd: str,
+    search_params: dict[str, Any],
+    expected_makes: list[str],
 ) -> None:
-    assert (
-        makeConditionQuery("price", cast(ConditionCode, condition_cd), value)
-        == expected
+    con = db_connection_with_tables
+    set_search_form_condition(con, column_cd, condition_cd)
+    insert(
+        con,
+        "car",
+        {"make": "Tesla", "model": "Model 3", "price": 50000, "electric": 1},
     )
-
-
-def test_make_condition(db_connection_with_tables: sqlite3.Connection) -> None:
-    screen = get_screen("car_list", db_connection_with_tables)
-    assert screen.make_condition({"model": "Focus"}) == [("`model` = ?", "Focus")]
-
-
-def test_make_condition_multiple(db_connection_with_tables: sqlite3.Connection) -> None:
-    screen = get_screen("car_list", db_connection_with_tables)
-    assert screen.make_condition({"model": "Focus", "make": "cdFord"}) == [
-        ("`model` = ?", "Focus"),
-        ("`make` = ?", "cdFord"),
-    ]
+    insert(
+        con,
+        "car",
+        {"make": "Ford", "model": "Focus", "price": 30000, "electric": 0},
+    )
+    con.execute(
+        "INSERT INTO car (make, model, price, electric) VALUES (?, ?, NULL, ?)",
+        ["Toyota", "Prius", 1],
+    )
+    screen = get_screen("car_list", con)
+    result = screen.search(search_params)
+    assert [r["make"] for r in result] == expected_makes
 
 
 def test_make_condition_invalid_key(

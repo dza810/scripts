@@ -133,7 +133,7 @@ def select(
         {"" if len(conditions) == 0 else f"WHERE {' AND '.join(v[0] for v in conditions)}"}
         ORDER BY {", ".join(quote_ident(c) for c in order_by)}
     """
-    paramsSql = [v[1] for v in conditions]
+    paramsSql = [v[1] for v in conditions if v[1] is not None]
     logger.debug("sql=", sql, "params=", paramsSql)
     return con.execute(sql, paramsSql).fetchall()
 
