@@ -3,7 +3,7 @@ import hmac
 import secrets
 import sqlite3
 from abc import ABC, abstractmethod
-from typing import Annotated, Any
+from typing import Annotated, Any, Iterator
 
 from fastapi import Cookie, Depends, FastAPI, Header, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -145,7 +145,31 @@ class ScreenCls(ABC):
         order_by: list[str],
     ) -> list[dict[str, Any]]:
         conditions = self.make_condition(params)
-        return select(self.con, table_name, order_by, conditions)
+        rows = select(self.con, table_name, order_by, conditions)
+        columns = {col.get("column_name"): col for col in self.getColumnOptions()}
+        result = []
+        for row in rows:
+            out = {}
+            for k, v in row.items():
+                if opt := columns.get(k):
+                    type_ = None
+                    if type_ := opt.get("type"):
+                        if type_ == "checkbox":
+                            if v == 0:
+                                out[k] = False
+                            elif v == 1:
+                                out[k] = True
+                            else:
+                                raise ValueError("expected boolean but neither 1 nor 0 got {v}")
+                        else:
+                            out[k] = v
+                elif k == "id":
+                    out[k] = v
+            if out:
+                result.append(out)
+        return result
+
+
 
     def run_insert(
         self, table_name: str, data: dict[str, Any]
@@ -240,7 +264,7 @@ class ScreenCls(ABC):
 
 
 class ScreenMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(params, "screen", ["screen_cd"])
 
     def update(self, update: Register) -> None:
@@ -248,7 +272,7 @@ class ScreenMaster(ScreenCls):
 
 
 class ColumnMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(params, "column", ["view_order", "column_cd"])
 
     def update(self, update: Register) -> None:
@@ -256,7 +280,7 @@ class ColumnMaster(ScreenCls):
 
 
 class CarList(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(params, "car", ["make", "model"])
 
     def update(self, update: Register) -> None:
@@ -264,7 +288,7 @@ class CarList(ScreenCls):
 
 
 class ClassMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(
             params, "classification", ["screen_id", "classification_cd"]
         )
@@ -274,7 +298,7 @@ class ClassMaster(ScreenCls):
 
 
 class ClassDtlMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(
             params, "class_dtl_master", ["classification_id", "class_dtl_cd"]
         )
@@ -284,7 +308,7 @@ class ClassDtlMaster(ScreenCls):
 
 
 class SearchFormMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(params, "search_form", ["search_form_id"])
 
     def update(self, update: Register) -> None:
@@ -292,7 +316,7 @@ class SearchFormMaster(ScreenCls):
 
 
 class RowStyleMaster(ScreenCls):
-    def search(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+    def search(self, params: dict[str, Any]):
         return self._search(params, "row_style", ["1", "2", "3"])
 
     def update(self, update: Register) -> None:
