@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from proj import setup_sqlite
 from proj.db import dict_factory, get_connection, insert
-from proj.main import app, get_connection
+from proj.main import app
 
 
 class CsrfTestClient(TestClient):
