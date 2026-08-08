@@ -81,13 +81,18 @@ function evaluateCell(calcCell) {
 }
 
 function calcFromThisCell(cell) {
-  for (const evalCell of graph.getEvaluationOrder([cell])) {
-    const { rowid, colid } = evalCell.dataset;
-    const newValue = evaluateCell(evalCell);
-    const oldValue = getCache(rowid, colid).textContent
-    if (newValue != oldValue) {
-      getCache(rowid, colid).textContent = newValue;
+  try {
+    for (const evalCell of graph.getEvaluationOrder([cell])) {
+      const { rowid, colid } = evalCell.dataset;
+      const newValue = evaluateCell(evalCell);
+      const oldValue = getCache(rowid, colid).textContent
+      if (newValue != oldValue) {
+        getCache(rowid, colid).textContent = newValue;
+      }
     }
+  } catch (e) {
+    const { rowid, colid } = cell.dataset
+    getCache(rowid, colid).textContent = "ERROR: " + e.toString();
   }
 }
 
