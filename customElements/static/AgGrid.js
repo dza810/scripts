@@ -14,9 +14,29 @@ export class AgGridDiv extends HTMLDivElement {
     return result;
   }
 
+  isUpdated(isChanged, params) {
+    if (params.data.__isDeleted) {
+      return false;
+    }
+    if (params.data.__isInserted) {
+      return true;
+    }
+    if (params.data.__isUpdated) {
+      const field = params.colDef.field;
+      if (!field) {
+        return false;
+      }
+      const oldValue = this.#originalData?.get?.(params.data.id)?.[field]
+      if (isChanged(oldValue, params.value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   #defaultColDef = {
     filter: true,
-    editable: (params) => params.data.__isInserted || !!params.colDef.isEditable,
+    editable: (params) => params.data.__isInserted || params.colDef.isEditable,
     cellStyle: params => {
       if (params.value === undefined) {
         return;
@@ -34,17 +54,7 @@ export class AgGridDiv extends HTMLDivElement {
     },
     cellClassRules: {
       'update-color': params => {
-        if (!params.data.__isDeleted && params.data.__isUpdated) {
-          const field = params.colDef.field;
-          if (!field) {
-            return false;
-          }
-          const oldValue = this.#originalData?.get(params.data.id)?.[field]
-          if (oldValue !== params.value) {
-            return true;
-          }
-        }
-        return false;
+        return this.isUpdated((a, b) => a !== b, params)
       },
       'delete-color': params => {
         return params.data.__isDeleted;
@@ -56,16 +66,10 @@ export class AgGridDiv extends HTMLDivElement {
         return !params.colDef.editable(params);
       }
     },
-    onCellValueChanged: (params) => {
+    valueSetter: (params) => {
       if (params.oldValue !== params.newValue) {
         params.data.__isUpdated = true;
-        params.api.refreshCells({
-          force: true
-        });
-        params.api.redrawRows({ rowNodes: [params.node] });
       }
-    },
-    valueSetter: (params) => {
       this.#clearError(params);
       params.data[params.colDef.field] = params.newValue;
       const value = params.newValue;
@@ -112,7 +116,7 @@ export class AgGridDiv extends HTMLDivElement {
     },
     "text": {
       cellDataType: "text",
-      cellEditor: "agTextCellEditor"
+      cellEditor: "agTextCellEditor",
     },
     "number": {
       cellDataType: "number",
@@ -121,10 +125,12 @@ export class AgGridDiv extends HTMLDivElement {
     },
     "checkbox": {
       cellDataType: "boolean",
-      cellRenderer: 'agCheckboxCellRenderer',
-      valueGetter: (params) => {
-        return params.data[params.colDef.field] == 1
-      }
+      cellRenderer: "agCheckboxCellRenderer",
+      valueGetter: function(params) {
+        const value = params.data[params.colDef.field];
+        return value == 1
+      },
+      defaultValue: 0,
     },
     "date": {
       cellDataType: "date"
@@ -203,8 +209,15 @@ export class AgGridDiv extends HTMLDivElement {
   }
 
   addRow() {
+    const newRow = { __isInserted: true }
+    for (const colOpt of this.#agGridOptions.columnOptions) {
+      const value = JSON.parse(JSON.stringify(colOpt.defaultValue ?? this.#columnTypes[colOpt.type]?.defaultValue ?? null))
+      if (value !== undefined) {
+        newRow[colOpt.column_cd] = value;
+      }
+    }
     this.#agGridApi.applyTransaction({
-      add: [{ __isInserted: true }]
+      add: [newRow],
     });
   }
 

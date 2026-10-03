@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Annotated, Any, Iterator
 
 from fastapi import Cookie, Depends, FastAPI, Header, Request, Response
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pydantic import BaseModel
@@ -84,8 +84,7 @@ def value_error(request: Request, exc: ValueError) -> JSONResponse:
         status_code=418, content={"message": f"invalid key: {','.join(exc.args)}"}
     )
 
-
-@app.get("/")
+@app.get("/screen")
 def root() -> FileResponse:
     return FileResponse("index.html")
 
@@ -174,7 +173,7 @@ class ScreenCls(ABC):
     def run_insert(
         self, table_name: str, data: dict[str, Any]
     ) -> sqlite3.Cursor | None:
-        logger.debug("insert", table_name, data)
+        logger.debug("insert: table_name={}, data={}", table_name, data)
         parsed_data = self.parse_data(data)
         self._check_required(parsed_data)
         return insert(self.con, table_name, parsed_data)
@@ -185,14 +184,14 @@ class ScreenCls(ABC):
         data: dict[str, Any],
         where: dict[str, Any],
     ) -> sqlite3.Cursor | None:
-        logger.debug("update", table_name, data)
+        logger.debug("update: table_name={}, data={}", table_name, data)
         parsed_data = self.parse_data(data)
         return update(self.con, table_name, parsed_data, where)
 
     def run_delete(
         self, table_name: str, where: dict[str, Any]
     ) -> sqlite3.Cursor | None:
-        logger.debug("delete", table_name)
+        logger.debug("delete: {}, where={}", table_name, where)
         return delete(self.con, table_name, where)
 
     def _update(self, table_name: str, update: Register) -> None:
@@ -232,7 +231,10 @@ class ScreenCls(ABC):
                     raise ValueError(f"{key} must be a number")
                 parsed_data[key] = value
             elif option["type"] == "text":
-                parsed_data[key] = str(value)
+                if value is None:
+                    parsed_data[key] = None
+                else:
+                    parsed_data[key] = str(value)
             elif option["type"] == "checkbox":
                 if value is True or value == "true" or value == 1:
                     parsed_data[key] = True
@@ -290,7 +292,7 @@ class CarList(ScreenCls):
 class ClassMaster(ScreenCls):
     def search(self, params: dict[str, Any]):
         return self._search(
-            params, "classification", ["screen_id", "classification_cd"]
+            params, "classification", ["classification_cd"]
         )
 
     def update(self, update: Register) -> None:
@@ -385,6 +387,9 @@ def getSearchForms(screen: Screen) -> list[dict[str, Any]]:
     searchForms = screen.getSearchForm()
     return searchForms
 
+def make_link_to_screen(screen_cd):
+    return f"/screen?screenCd={screen_cd}"
+
 
 def make_menu(dbConnection: DbConnection):
     with contextlib.closing(dbConnection.cursor()) as screen_cur:
@@ -393,7 +398,7 @@ def make_menu(dbConnection: DbConnection):
         yield """<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>"""
         yield """<div><menu>"""
         for screen in screen_cur:
-            yield f"""<ul><a href="/?screenCd={screen["screen_cd"]}">{screen["screen_name"]}</a></ul>"""
+            yield f"""<ul><a href="{make_link_to_screen(screen["screen_cd"])}">{screen["screen_name"]}</a></ul>"""
         yield """</ul></div>"""
         yield """</body>"""
 
@@ -402,6 +407,9 @@ def make_menu(dbConnection: DbConnection):
 def menu(response: Response, dbConnection: DbConnection):
     return StreamingResponse(make_menu(dbConnection), media_type="text/html")
 
+@app.get("/")
+def index():
+    return RedirectResponse(url="/menu")
 
 if __name__ == "__main__":
     import uvicorn

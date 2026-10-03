@@ -19,12 +19,6 @@ def dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]
     return {key: value for key, value in zip(fields, row)}
 
 
-"""
-async なしの場合 fastapi が別スレッドで動かしてしまう。
-=> handler メソッドで async にできるようにここにもつける
-"""
-
-
 def get_connection(
     dbname: str = "data.db",
 ) -> Iterator[sqlite3.Connection]:
@@ -37,7 +31,7 @@ def get_connection(
 
 def handleSqlValue(v: Any) -> str:
     if v is None:
-        return "NULL"
+        return None
     if v is True:
         return "1"
     if v is False:
@@ -70,8 +64,9 @@ def insert(
           {",\n  ".join("?" for _ in data)}
         )
         """
-    logger.debug(sql)
-    return con.execute(sql, [handleSqlValue(v) for v in data.values()])
+    params = [handleSqlValue(v) for v in data.values()]
+    logger.debug("sql={}, params={}", sql, params)
+    return con.execute(sql, params)
 
 
 def update(
@@ -91,7 +86,7 @@ def update(
       {" AND ".join(v[0] for v in conditions)}
     """
     params = list(data.values()) + [v[1] for v in conditions if v[1] is not None]
-    logger.debug("sql=", sql, "params=", params)
+    logger.debug("sql={}, params={}", sql, params)
     return con.execute(sql, params)
 
 
@@ -107,7 +102,7 @@ def delete(
       {" AND ".join(v[0] for v in conditions)}
     """
     params = [v[1] for v in conditions if v[1] is not None]
-    logger.debug("sql=", sql, "params=", params)
+    logger.debug("sql={}, params={}", sql, params)
     return con.execute(sql, params)
 
 
@@ -126,7 +121,7 @@ def select(
         ORDER BY {", ".join(quote_ident(c) for c in order_by)}
     """
     paramsSql = [v[1] for v in conditions if v[1] is not None]
-    logger.debug("sql=", sql, "params=", paramsSql)
+    logger.debug("sql={}, params={}", sql, paramsSql)
     return con.execute(sql, paramsSql).fetchall()
 
 
@@ -161,7 +156,7 @@ def makeConditionQuery(
                     )
                 )
         case _:
-            logger.warning("skip", condition)
+            logger.warning("skip: {}", condition)
     return queries
 
 
@@ -176,7 +171,7 @@ def getClass(con: sqlite3.Connection, classification_cd: str) -> list[dict[str, 
       ORDER BY class_dtl_master.view_order
       """
     params = {"classification_cd": classification_cd}
-    logger.debug("sql=", sql, "params=", params)
+    logger.debug("sql={}, params={}", sql, params)
     return con.execute(sql, params).fetchall()
 
 
