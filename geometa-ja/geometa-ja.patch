@@ -1,0 +1,147 @@
+--- geometa.user.js
++++ geometa-ja.user.js
+@@ -1,14 +1,13 @@
+ // ==UserScript==
+-// @name         GeoGuessr Learnable Meta
++// @name         GeoGuessr Learnable Meta (JA)
+ // @namespace    geometa
+ // @version      0.97
+ // @description  UserScript for GeoGuessr Learnable Meta maps
+ // @icon         https://learnablemeta.com/favicon.png
+-// @downloadURL  https://userscript.learnablemeta.com/geometa.user.js
+-// @updateURL    https://userscript.learnablemeta.com/geometa.user.js
+ // @match        *://*.geoguessr.com/*
+ // @require      https://raw.githubusercontent.com/miraclewhips/geoguessr-event-framework/5e449d6b64c828fce5d2915772d61c7f95263e34/geoguessr-event-framework.js
+ // @connect      learnablemeta.com
++// @connect      generativelanguage.googleapis.com
+ // @grant        GM_addStyle
+ // @grant        GM_getValue
+ // @grant        GM_info
+@@ -19,6 +18,118 @@
+ // @run-at       document-start
+ // ==/UserScript==
+ 
++// ===== geometa-ja: BEGIN（日本語翻訳アドオン。本体との接点は `_GM_xmlhttpRequest` の1行だけ） =====
++const GEMINI_API_KEY = ""; // ← Gemini API キーを入れる（空のままなら翻訳せず英語のまま表示）
++const GEMINI_MODEL = "gemini-3.1-flash-lite";
++
++const GEOMETA_JA_SYSTEM_PROMPT = `You translate GeoGuessr "meta" notes from English into natural Japanese.
++
++The input is a JSON object {"metaName": string, "note": string}. "note" is an HTML fragment.
++
++About the content:
++- These notes are clues used by GeoGuessr players to identify a country or region from Street View imagery.
++- They contain many GeoGuessr-specific terms (meta, coverage, Gen 2/Gen 3/Gen 4 camera, Google car, snorkel, antenna, blur, bollard, chevron, road lines, plate, etc.), place names, and detailed descriptions of utility poles (pole types, crossarms, insulators, guy wires, pole markings) and vegetation (tree/plant species, soil colour, landscape).
++- Translate these terms accurately and consistently. Keep GeoGuessr jargon in the form Japanese players use (e.g. メタ, カバレッジ, Gen 3, ボラード, シェブロン). For plant species, use the Japanese name if a common one exists, otherwise keep the original name.
++- Use the usual Japanese name for countries and major regions. For other place names (towns, provinces, roads), keep the original spelling, because players match them against signs.
++
++Rules:
++- Preserve every HTML tag, attribute and link exactly; translate only the human-readable text.
++- Do not add, remove or guess information. Do not add explanations.
++- Return JSON {"metaName": string, "note": string} with the translated values.`;
++
++const GEOMETA_JA_CACHE_KEY = "geometaJaTranslationCache";
++const GEOMETA_JA_CACHE_MAX = 1000;
++
++function geometaJaHash(str) {
++  let h = 0x811c9dc5; // FNV-1a 32bit
++  for (let i = 0; i < str.length; i++) {
++    h ^= str.charCodeAt(i);
++    h = Math.imul(h, 0x01000193);
++  }
++  return (h >>> 0).toString(16);
++}
++
++function geometaJaCallGemini(input) {
++  return new Promise((resolve, reject) => {
++    GM_xmlhttpRequest({
++      method: "POST",
++      url: `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
++      headers: { "Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY },
++      data: JSON.stringify({
++        systemInstruction: { parts: [{ text: GEOMETA_JA_SYSTEM_PROMPT }] },
++        contents: [{ role: "user", parts: [{ text: JSON.stringify(input) }] }],
++        generationConfig: {
++          responseMimeType: "application/json",
++          responseSchema: {
++            type: "OBJECT",
++            properties: { metaName: { type: "STRING" }, note: { type: "STRING" } },
++            required: ["metaName", "note"],
++          },
++          thinkingConfig: { thinkingLevel: "minimal" },
++        },
++      }),
++      timeout: 30e3,
++      onload: (res) => {
++        try {
++          if (res.status !== 200) throw new Error(`Gemini HTTP ${res.status}: ${res.responseText}`);
++          const parts = JSON.parse(res.responseText).candidates[0].content.parts;
++          resolve(JSON.parse(parts.filter((p) => !p.thought).map((p) => p.text).join("")));
++        } catch (e) {
++          reject(e);
++        }
++      },
++      onerror: (e) => reject(e),
++      ontimeout: () => reject(new Error("Gemini request timed out")),
++    });
++  });
++}
++
++// data（location API のレスポンス）の metaName / note を日本語に置き換える
++async function geometaJaTranslate(data) {
++  if (!data || !data.note) return;
++  const input = { metaName: data.metaName ?? "", note: data.note };
++  const key = geometaJaHash(GEMINI_MODEL + "\n" + input.metaName + "\n" + input.note);
++  const cache = GM_getValue(GEOMETA_JA_CACHE_KEY, {});
++  let translated = cache[key];
++  if (!translated) {
++    translated = await geometaJaCallGemini(input);
++    const keys = Object.keys(cache);
++    if (keys.length >= GEOMETA_JA_CACHE_MAX) delete cache[keys[0]];
++    cache[key] = translated;
++    GM_setValue(GEOMETA_JA_CACHE_KEY, cache);
++  }
++  if (data.metaName && translated.metaName) data.metaName = translated.metaName;
++  if (translated.note) data.note = translated.note;
++}
++
++// 本体の _GM_xmlhttpRequest を包み、location API のレスポンスだけ翻訳してから本体に渡す
++function geometaJaWrapXhr(origXhr) {
++  if (!origXhr || !GEMINI_API_KEY) return origXhr;
++  return (details) => {
++    const origOnload = details.onload;
++    if (!origOnload || !String(details.url).startsWith("https://learnablemeta.com/api/userscript/location?")) {
++      return origXhr(details);
++    }
++    return origXhr({
++      ...details,
++      onload: async (response) => {
++        let responseText = response.responseText;
++        if (response.status === 200) {
++          try {
++            const data = JSON.parse(responseText);
++            await geometaJaTranslate(data);
++            responseText = JSON.stringify(data);
++          } catch (e) {
++            console.error("[geometa-ja] translation failed, showing original:", e);
++          }
++        }
++        origOnload({ ...response, status: response.status, responseText });
++      },
++    });
++  };
++}
++// ===== geometa-ja: END =====
++
+ 
+ /*
+ # Changelog
+@@ -208,7 +319,7 @@
+   var _GM_info = (() => typeof GM_info != "undefined" ? GM_info : void 0)();
+   var _GM_registerMenuCommand = (() => typeof GM_registerMenuCommand != "undefined" ? GM_registerMenuCommand : void 0)();
+   var _GM_setValue = (() => typeof GM_setValue != "undefined" ? GM_setValue : void 0)();
+-  var _GM_xmlhttpRequest = (() => typeof GM_xmlhttpRequest != "undefined" ? GM_xmlhttpRequest : void 0)();
++  var _GM_xmlhttpRequest = geometaJaWrapXhr((() => typeof GM_xmlhttpRequest != "undefined" ? GM_xmlhttpRequest : void 0)());
+   var _unsafeWindow = (() => typeof unsafeWindow != "undefined" ? unsafeWindow : void 0)();
+   const DEV = false;
+   var is_array = Array.isArray;
